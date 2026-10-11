@@ -40,6 +40,14 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 - Rewriting the prefab file on disk changes nothing in Radiant until it re-reads it. `EnterSelectedPrefab` shows the copy held in memory (the old content); `LeavePrefab` re-reads the file (`Loading prefab ...` in the log), and every instance of that prefab takes the new content — one enter/leave refreshes them all. The camera is untouched; the selection is cleared.
 - **Entering and leaving a prefab empties the undo stack** (the next operation is `# 1` again, then Edit > Undo is disabled). Refreshing a prefab in the user's Radiant would erase their undo history every time, so the agent's work must reach the user's map by import (one undo entry), not through a prefab file the user's Radiant re-reads.
 
+## Two Radiants side by side
+
+- A second `radiant_modtools.exe` starts next to the user's, loads the host and our plugin, and serves its own pipe (`t7_radiant_bridge_<pid>`) and its own MTPlugins control window: the two never collide when addressed by pid. A map path on the command line opens that map at start.
+- Each has its own camera, selection and undo; the second captures fine off screen while the first is untouched.
+- Cost for a small map: about 2 GB of RAM (2.0 GB working set, 3.1 GB private; free memory went from 9.5 to 7.6 GB of 32).
+- **Both write the same `Documents\Radiant.log`, interleaved and unlabelled, and the second truncated it at start**, wiping the first's earlier lines. With two instances the log file is no evidence of anything: the console must come from the plugin, per instance (hook `SysPrintf`).
+- Radiant saves its window layout on exit: put a sandbox window back on screen before closing it, or the next Radiant may open off screen. A modified map asks "save?" on close, in a box nobody sees off screen: discard first (reload from disk), then close.
+
 ## Reload and modal dialogs
 
 - `ReloadMap` refuses while a mouse button is held anywhere on the desktop (the host reads the global mouse state): retry later.
@@ -51,4 +59,4 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 
 ## Open
 
-Two Radiants side by side; `Save Custom Screenshot...`; `build` on a map the plugin produced.
+`build` on a map the plugin produced. (`Save Custom Screenshot...` opens a dialog, and `PrintWindow` already covers captures, so it is not needed.)
