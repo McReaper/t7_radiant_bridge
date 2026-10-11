@@ -24,6 +24,7 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 
 - After `SetCamera` + `RequestRedraw`, waiting for two `OnDraw` frames of that view gives the new view; `PrintWindow(PW_CLIENTONLY | PW_RENDERFULLCONTENT)` on `CamWindow` works from Radiant's main thread and takes 94–125 ms for a 1711×869 view.
 - Positive pitch looks up (the `ModToolsCamParams` comment is right; the `MapEditExample` comment is not).
+- Off screen (the window moved left of every monitor), Radiant keeps rendering and the capture is a fresh, lit view. Minimised, `PrintWindow` fails: a sandbox Radiant for the agent must stay un-minimised, which off screen allows; on the user's Radiant the plugin must say so rather than return a stale or empty image.
 - Tool volumes (`volume_sun`'s brush) hide what is behind them, and an unbaked map renders its floor black: a capture needs a clean-view preset (hide volumes, clips, tool textures) and, for a blockout, the fake lighting mode rather than a bake.
 
 ## Patches, probes and the bake
@@ -43,4 +44,4 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 
 ## Open
 
-Capture of a minimised or off-screen Radiant; two Radiants side by side; prefab enter/leave re-reading the file; `Save Custom Screenshot...`; `build` on a map the plugin produced.
+Two Radiants side by side; prefab enter/leave re-reading the file; `Save Custom Screenshot...`; `build` on a map the plugin produced.
