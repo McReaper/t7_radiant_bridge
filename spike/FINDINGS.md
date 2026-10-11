@@ -34,6 +34,12 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 - A `reflection_probe` imported through `ImportMapText` bakes without an assert on host 1.1.0: the bake logs one `Probe:` line per probe (three for three). The SDK docs' warning did not reproduce.
 - The bake is the 3D view's bolt, the third `QToolButton` under the `QToolBar` named `Exposure`; `ui->ClickButton` on it starts a full bake, which ends with `All Probes Done (<s> s)` in `Documents\Radiant.log`. Finding the button by position is fragile: the durable path is Radiant's own `CCamWnd_BuildLighting`.
 
+## Prefabs
+
+- A `misc_prefab` instance (`"model" "_prefabs/<dir>/<name>.map"`) imported through the API loads its prefab, and its selection bounds follow the prefab's content.
+- Rewriting the prefab file on disk changes nothing in Radiant until it re-reads it. `EnterSelectedPrefab` shows the copy held in memory (the old content); `LeavePrefab` re-reads the file (`Loading prefab ...` in the log), and every instance of that prefab takes the new content — one enter/leave refreshes them all. The camera is untouched; the selection is cleared.
+- **Entering and leaving a prefab empties the undo stack** (the next operation is `# 1` again, then Edit > Undo is disabled). Refreshing a prefab in the user's Radiant would erase their undo history every time, so the agent's work must reach the user's map by import (one undo entry), not through a prefab file the user's Radiant re-reads.
+
 ## Reload and modal dialogs
 
 - `ReloadMap` refuses while a mouse button is held anywhere on the desktop (the host reads the global mouse state): retry later.
@@ -45,4 +51,4 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 
 ## Open
 
-Two Radiants side by side; prefab enter/leave re-reading the file; `Save Custom Screenshot...`; `build` on a map the plugin produced.
+Two Radiants side by side; `Save Custom Screenshot...`; `build` on a map the plugin produced.
