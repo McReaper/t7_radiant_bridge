@@ -89,7 +89,10 @@ namespace
     std::atomic<bool> g_stop{ false };
     HANDLE g_stopEvent = nullptr;
     std::thread g_thread;
-    unsigned g_frames[4] = {};                     // OnDraw count per view: 0 YZ, 1 XZ, 2 XY, 3 the 3D camera
+    unsigned g_frames[4] = {};
+    std::atomic<unsigned long long> g_ticks{ 0 };    // every OnTick, nested ones included
+    std::atomic<unsigned long long> g_nestedTicks{ 0 };
+    bool g_inTick = false;                          // a command (a menu's modal dialog) can pump a nested tick                     // OnDraw count per view: 0 YZ, 1 XZ, 2 XY, 3 the 3D camera
 
     void Finish(const std::shared_ptr<Job>& job, std::string reply)
     {
@@ -311,6 +314,28 @@ namespace
             rp::host->DeselectAll(rp::self);
             return rp::host->ReloadMap(rp::self, Widen(Rest(line, 1)).c_str(), 1) ? Ok() : Err("ReloadMap refused (inside a prefab, or a mouse button is held anywhere)");
         }
+        if ((cmd == "children" && w.size() == 3) || (cmd == "click-child" && w.size() == 4))   // children <objectName> <class> | click-child <objectName> <class> <index>
+        {
+            const ModToolsUiApi* ui = rp::host->ui;
+            ModToolsWidget parent = ui ? ui->FindEditorWidget(w[1].c_str()) : nullptr;
+            if (!parent) return Err("no widget named " + w[1]);
+            if (cmd == "click-child")
+            {
+                ModToolsWidget c = ui->FindChild(parent, w[2].c_str(), std::stoi(w[3]));
+                if (!c) return Err("no such child");
+                ui->ClickButton(c);
+                return Ok("clicked\n");
+            }
+            std::string out;
+            for (int i = 0; i < 64; ++i)
+            {
+                ModToolsWidget c = ui->FindChild(parent, w[2].c_str(), i);
+                if (!c) break;
+                int ok = 0; double v = ui->WidgetNumber(c, &ok);
+                out += std::to_string(i) + (ok ? " value=" + std::to_string(v) : std::string()) + (ui->IsChecked(c) ? " checked" : "") + "\n";
+            }
+            return Ok(out);
+        }
         if (cmd == "batch") return Err("batch cannot nest");
         return Err("unknown command '" + cmd + "'");
     }
@@ -449,6 +474,9 @@ namespace
 
     void OnTick(void)
     {
+        ++g_ticks;
+        if (g_inTick) { ++g_nestedTicks; return; }
+        g_inTick = true;
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             while (!g_queue.empty()) { g_active.push_back(g_queue.front()); g_queue.pop_front(); }
@@ -460,6 +488,7 @@ namespace
             if (abandoned || Run(g_active[i])) g_active.erase(g_active.begin() + std::ptrdiff_t(i));
             else ++i;
         }
+        g_inTick = false;
     }
 
     void OnDraw(const ModToolsDrawContext* ctx)
@@ -472,6 +501,11 @@ namespace
     const char* OnCommand(const char* cmd)
     {
         static std::string reply;
+        if (cmd && std::string(cmd) == "ticks")
+        {
+            reply = "ticks=" + std::to_string(g_ticks.load()) + " nested=" + std::to_string(g_nestedTicks.load()) + " inTick=" + std::to_string(int(g_inTick)) + " active=" + std::to_string(g_active.size());
+            return reply.c_str();
+        }
         reply = std::string("pipe \\\\.\\pipe\\t7_radiant_bridge_") + std::to_string(GetCurrentProcessId()) + (cmd ? std::string(" (got '") + cmd + "')" : "");
         return reply.c_str();
     }
