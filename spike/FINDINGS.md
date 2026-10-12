@@ -48,6 +48,13 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 - **Both write the same `Documents\Radiant.log`, interleaved and unlabelled, and the second truncated it at start**, wiping the first's earlier lines. With two instances the log file is no evidence of anything: the console must come from the plugin, per instance (hook `SysPrintf`).
 - Radiant saves its window layout on exit: put a sandbox window back on screen before closing it, or the next Radiant may open off screen. A modified map asks "save?" on close, in a box nobody sees off screen: discard first (reload from disk), then close.
 
+## From the plugin to the game
+
+- On a usermap made by `t7kb create zm_t7kb_spike`, the plugin imported a 64×64×256 pillar and a `light` given only `classname` and `origin`; Radiant filled in the class's default keys (`PRIMARY_TYPE` omni, `radius` 100, `_color`...). `TriggerMenuAction("File/Save")` saved the named map with no prompt.
+- `t7kb build` then passed every stage (gdt, compile, light low, link: 41 s) and the game showed the pillar where the plugin put it.
+- The light stage's `radiant_modtools -ledSilent` loads the MTPlugins host too (its hooks, the map load) and still bakes; our plugin did not load there, the process ending before the host's first tick. If it ever does, it must stay idle in a headless Radiant.
+- `t7kb build` itself missed two things, filed as McReaper/t7_companion#66: it links English by default while the game is French (`ERROR: Could not find zone 'fr_<map>'`), and its run stage does not read the game's console log, which holds the load errors once `logfile=2` is set.
+
 ## Reload and modal dialogs
 
 - `ReloadMap` refuses while a mouse button is held anywhere on the desktop (the host reads the global mouse state): retry later.
@@ -57,6 +64,18 @@ Measured on the user's install (BO3 mod tools, Steam build), MTPlugins 1.0.0 cor
 - Hot swap: `plugins disable <Name>`, copy the new DLL, `plugins enable <Name>`, without restarting Radiant.
 - A request whose client timed out stayed queued and ran later (five reloads in a row once the box was answered). Fixed: a timed-out request is abandoned and never runs.
 
-## Open
+`Save Custom Screenshot...` opens a dialog; `PrintWindow` already covers captures, so it is not needed.
 
-`build` on a map the plugin produced. (`Save Custom Screenshot...` opens a dialog, and `PrintWindow` already covers captures, so it is not needed.)
+## Decisions
+
+- **The DLL is C++.** The plugin is rebuilt and hot-swapped many times (disable, copy, enable) without restarting Radiant, which a Go DLL cannot do (Go cannot be unloaded); it needs `Detour` (the console through `SysPrintf`) and Radiant-thread message handling, and a panic in Go would kill the user's Radiant past the host's crash isolation. The logic that shapes answers for agents stays in Go, in t7kb.
+- **Commands reach Radiant's main thread through a message-only window of the plugin's own**, not the host's tick, so the plugin keeps answering while a modal dialog is up; a reentrancy guard covers a command that opens one, and a request whose client gave up never runs.
+- **The protocol:** one named pipe per Radiant (`t7_radiant_bridge_<pid>`), length-prefixed request/reply, with pushed events (map loaded or saved, prefab scope, console lines) and a version handshake at connect.
+- **Undo:** an agent action is one labelled undo step when it only imports and deletes; a Radiant command is its own step, never inside our group.
+- **The agent's work reaches the user's map by import**, not by a prefab the user's Radiant re-reads (which empties their undo stack).
+- **The console comes from the plugin, per instance**, not from `Documents\Radiant.log`, which two Radiants share and truncate.
+- **The sandbox Radiant lives off screen, never minimised**, started with its map on the command line, put back on screen and discarded before it closes.
+
+Host functions the spike used, should a host of our own replace MTPlugins later: `ImportMapText`, `DeleteBrushes`, `WriteEntityText`, `ForEachEntity`/`ForEachEntityBrush`, `FindEntitiesByGuid`/`FindBrushesByGuid`, `BrushInstOf`, `SelectBrushInsts`, `DeselectAll`, `GetSelection`, `BeginUndo`/`EndUndo`, `TriggerMenuAction`, `MenuEntries`, `GetCamera`/`SetCamera`, `RequestRedraw`, `CamWindow`/`XYWindow`, `EnterSelectedPrefab`/`LeavePrefab`, `ReloadMap`, `PrefabDepth`, `IsMapModified`, `CurrentMapPath`, `ui->FindEditorWidget`/`FindChild`/`ClickButton`, and the `OnTick`/`OnDraw`/`OnCommand` callbacks. Raw Radiant functions to adopt next: `SysPrintf` (console), `CCamWnd_BuildLighting` (bake), `SetKeyValue` with `Undo_*` (in-place keys, worldspawn).
+
+Worth telling MTPlugins' author: the `reflection_probe` warning in `GETTING_STARTED.md` does not reproduce on host 1.1.0, the `MapEditExample` pitch comment has the sign wrong, and `ReloadMap` refuses on a mouse button held anywhere on the desktop.
