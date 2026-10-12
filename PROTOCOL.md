@@ -36,11 +36,23 @@ How a client — t7kb — talks to the T7RadiantBridge plugin inside a running R
 | `command <menu path…>` | | runs a Radiant menu entry (`Selection/CSG/CSG Hollow`) on the current selection; `err missing`, `err disabled` |
 | `menus [<menu path…>]` | | body: one `label<TAB>enabled<TAB>has_submenu` line per entry |
 | `camera [<x> <y> <z> <pitch> <yaw> <roll>]` | | the camera, after setting it when given (degrees; positive pitch looks up) |
-| `capture 3d\|xy\|xz\|yz` | | summary `w=<w> h=<h>`; body: the view's pixels, BGRA, top row first, from a frame drawn after the request; `err minimised` |
+| `capture 3d\|xy\|xz\|yz [<x> <y> <z> <pitch> <yaw> <roll>]` | optional: one `x y z` world point per line | a view's frame and its projection, see [Vision](#vision) |
+| `action <name> [trigger]` | | a named action of Radiant's (`actionTex_Unlit`), triggered when asked; summary `checkable=0\|1 checked=0\|1 enabled=0\|1` afterwards; `err not-found` |
 | `bake` | | starts the lighting bake; its end comes as the `bake` event |
 | `save` | | saves the open map (File > Save) |
 | `reload <path…>` | | opens a map without any prompt, unsaved changes lost; `err busy` while a mouse button is held |
 | `subscribe <event>…` | | starts sending these events on this connection |
+
+## Vision
+
+`capture` is how an agent sees its work: one view's frame, and what it needs to tie the image to the map.
+
+- **The frame** is drawn after the request, with nothing selected (selected brushes draw tinted; the selection is put back after) and none of the bridge's own overlays. It shows what the view shows: its render mode and filters, the bake's lighting once baked. `err minimised` when Radiant is minimised; covered or off screen is fine.
+- **A pose** (3D only) shoots from that camera and then puts the user's camera back; `err busy` while a mouse button is held.
+- **The reply summary** carries the view's projection: `w=<w> h=<h> origin=<x>,<y>,<z> angles=<pitch>,<yaw>,<roll> game_view=0|1` for `3d`, `w=<w> h=<h> centre=<x>,<y>,<z> scale=<pixels per unit>` for a 2D view (`xy` looks down, `xz` from the front, `yz` from the side).
+- **The reply body** is the pixels, `w × h × 4` bytes, BGRA, top row first; then, when the request listed world points, one `<px> <py>` line per point, in that frame's projection (`-` for a point behind the camera). The client places labels and boxes with these, so the image and the map agree without the client knowing Radiant's lens.
+- **Render modes** are Radiant's own actions (`actionTex_Real`, `actionTex_Unlit`, `actionTex_Wireframe`), read and switched with `action`; an unbaked map renders its floor black in the default one. A client that switches a mode switches it back.
+- **Belongs to the client:** scaling to the agent's pixel budget, encoding, the labels drawn on the image, framing a target from its bounds, several angles in one sheet.
 
 ## Events
 
