@@ -32,6 +32,17 @@ namespace bridge
 
         HWND MainWindow() { return static_cast<HWND>(rp::host->MainWindow(rp::self)); }
 
+        // What `state` reports as entries of Radiant's menus, so a client puts the user's back with one `command`:
+        // View/Render Method/<render>, View/Layout/<view2d>.
+        std::string RenderLabel(int method)
+        {
+            static const char* const kMethods[] = { "Wireframe", "Fullbright", "Normal-based Fake Lighting", "View-Based Fake Lighting", "Real Lighting", nullptr, "Tri Density" };
+            if (method >= 0 && method < int(std::size(kMethods)) && kMethods[method]) return kMethods[method];
+            return method < 0 ? std::string() : std::to_string(method);
+        }
+        const char* const kLayouts[] = { "YZ", "XZ", "XY (Top)" };   // by ModToolsXYParams::type
+        int g_lastView2D = -1;                                       // the type the 2D view last drew
+
         // ---- the selection, kept by GUID so that it survives any edit in between ------------------------------
         struct Picked
         {
@@ -167,6 +178,8 @@ namespace bridge
             HWND main = MainWindow();
             b += "minimised=" + std::to_string(main && IsIconic(main) ? 1 : 0) + "\n";
             b += "dialog=" + (c.blocked ? c.dialog : std::string()) + "\n";
+            b += "render=" + RenderLabel(radiant::RenderMethod()) + "\n";
+            b += "view2d=" + std::string(g_lastView2D >= 0 ? kLayouts[g_lastView2D] : "") + "\n";
             return Ok(std::string(), b);
         }
 
@@ -404,6 +417,7 @@ namespace bridge
             unsigned target = 0;
             ULONGLONG deadline = 0;
             bool drawn = false;
+            int others = 0, otherView = -1;   // 2D frames of another axis since the request
             ModToolsDrawContext ctx{};
             std::vector<std::array<float, 2>> projected;
             std::vector<bool> inFront;
@@ -434,7 +448,8 @@ namespace bridge
             }
             HWND main = MainWindow();
             if (main && IsIconic(main)) return Err("minimised", "Radiant is minimised: it draws nothing");
-            if (!ViewWindow(view)) return Err("not-found", "that view has not drawn yet (is its pane open?)");
+            // a 2D view gets its window once it draws as that axis, which the redraw below may be the first time
+            if (view == 3 && !ViewWindow(view)) return Err("not-found", "the 3D view has not drawn yet");
             if (job->pose && radiant::MouseHeld()) return Err("busy", "a mouse button is held");
             job->conn = c.conn;
             job->id = c.h.id;
@@ -561,7 +576,13 @@ namespace bridge
         int view = ctx->view == MODTOOLS_VIEW_3D ? 3 : ctx->xy.type >= 0 && ctx->xy.type < 3 ? ctx->xy.type : -1;
         if (view < 0) return;
         ++g_frames[view];
+        if (view < 3) g_lastView2D = view;
         CaptureJob* j = g_job.get();
+        if (j && !j->drawn && j->view < 3 && view < 3 && view != j->view)
+        {
+            ++j->others;
+            j->otherView = view;
+        }
         if (!j || j->drawn || j->view != view || g_frames[view] < j->target) return;
         j->ctx = *ctx;
         for (const auto& p : j->points)
@@ -577,9 +598,16 @@ namespace bridge
     void CaptureTick()
     {
         CaptureJob* j = g_job.get();
-        if (!j || (!j->drawn && GetTickCount64() < j->deadline)) return;
+        if (j && !j->drawn && j->view < 3) rp::host->RequestRedraw(rp::self, MODTOOLS_VIEW_2D);   // a 2D view draws only while dirty
+        // the 2D views drew twice, none of them as this axis: it is not shown, no need to wait
+        bool elsewhere = j && !j->drawn && j->others >= 2;
+        if (!j || (!j->drawn && !elsewhere && GetTickCount64() < j->deadline)) return;
         std::unique_ptr<CaptureJob> job = std::move(g_job);
-        Reply r = job->drawn ? Shoot(*job) : Err("refused", "the view drew no frame within 3 s");
+        const char* next = ": command View/Layout/Next (XY, YZ, XY) turns it XY, XZ, YZ";
+        Reply r = job->drawn ? Shoot(*job)
+                  : job->view == 3 ? Err("refused", "the 3D view drew no frame within 3 s")
+                  : elsewhere ? Err("not-found", std::string("the 2D view shows ") + kLayouts[job->otherView] + next)
+                  : Err("not-found", std::string("no 2D view drew within 3 s (is one open? command View/Toggle View Window/Active XY)"));
         Restore(*job);
         Complete(job->conn, job->id, r);
     }

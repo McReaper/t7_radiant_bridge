@@ -26,20 +26,20 @@ How a client — t7kb — talks to the T7RadiantBridge plugin inside a running R
 | Command | Request body | Reply summary / body |
 | --- | --- | --- |
 | `hello <protocol>` | | first on a connection; `<protocol> plugin=<version> host=<version> pid=<pid>`; `err version` when the plugin cannot serve the client's protocol |
-| `state` | | body: `key=value` lines — `map`, `modified`, `prefab_depth`, `entities`, `selected`, `minimised`, `dialog` (empty when none) |
+| `state` | | body: `key=value` lines — `map`, `modified`, `prefab_depth`, `entities`, `selected`, `minimised`, `dialog` (empty when none), `render` and `view2d` (see [Vision](#vision)) |
 | `entities [<guid>…]` | | body: the entities' text as Radiant writes it, all of them without arguments; summary `missing=<guid>,…` for unknown GUIDs |
 | `selection` | | body: one line per selected brush, `<brush guid> <entity guid> <min x> <min y> <min z> <max x> <max y> <max z>` |
-| `import <label…>` | entity text, worldspawn block first | body: one line per entity that got brushes, `<entity guid> <brush guid>…`, in import order |
+| `import <label…>` | entity text, worldspawn block first | body: one line per entity that got brushes, `<entity guid> <brush guid>…`, in import order (world brushes under worldspawn's GUID; a point entity has one brush, its placeholder) |
 | `delete <label…>` | one entity or brush GUID per line | summary `deleted=<brushes>`; an entity GUID deletes the entity; `err not-found` deletes nothing; worldspawn is refused |
 | `replace <guid> <label…>` | the entity's new text | summary: the entity's GUID afterwards (a `misc_prefab` gets a new one); refused for worldspawn and `reflection_probe` |
-| `setkey <guid> <key> [<value…>]` | | sets the key in place to the rest of the line (empty allowed), worldspawn included; `guid` and `classname` are refused; removing a key is a `replace` |
+| `setkey <guid> <key> [<value…>]` | | sets the key in place to the rest of the line (empty allowed), worldspawn included; `guid` and `classname` are refused, and so is a value Radiant will not take as text (`origin`, `angles`: change those with `replace`), leaving no undo step; removing a key is a `replace` |
 | `select <guid>…` / `deselect` | | the selection, as `selection`; summary `missing=<guid>,…` |
 | `command <menu path…>` | | runs a Radiant menu entry (`Selection/CSG/CSG Hollow`) on the current selection; `err missing`, `err disabled` |
 | `menus [<menu path…>]` | | body: one `label<TAB>enabled<TAB>has_submenu` line per entry (`---` a separator) |
 | `action <name> [trigger]` | | a named action of Radiant's (`actionTex_Unlit`), triggered when asked; summary `checkable=0\|1 checked=0\|1 enabled=0\|1` afterwards; `err not-found` |
 | `camera [<x> <y> <z> <pitch> <yaw> <roll>]` | | summary: the camera, after setting it when given (degrees; positive pitch looks up, yaw 90 faces +y) |
 | `capture 3d\|xy\|xz\|yz [<x> <y> <z> <pitch> <yaw> <roll>]` | optional: one `x y z` world point per line | a view's frame and its projection, see [Vision](#vision) |
-| `bake` | | starts Radiant's lighting bake (sun and probes), which ends with the console line `All Probes Done (<s> s)`; refused unless the 3D view shows real lighting |
+| `bake` | | starts Radiant's lighting bake (sun and probes), which ends with the console event `All Probes Done (<s> s)`; refused unless the 3D view's render method is `Real Lighting` |
 | `save` | | saves the open map (File > Save); refused for an unnamed map |
 | `reload <path…>` | | opens a map without any prompt, unsaved changes lost; `err busy` while a mouse button is held, refused inside a prefab |
 | `subscribe <event>…` | | starts sending these events on this connection |
@@ -48,18 +48,19 @@ How a client — t7kb — talks to the T7RadiantBridge plugin inside a running R
 
 `capture` is how an agent sees its work: one view's frame, and what it needs to tie the image to the map.
 
-- **The frame** is drawn after the request, with nothing selected (selected brushes draw tinted; the selection is put back after) and none of the bridge's own overlays. It shows what the view shows: its render mode and filters, the bake's lighting once baked. `err minimised` when Radiant is minimised; covered or off screen is fine.
+- **The frame** is drawn after the request, with nothing selected (selected brushes draw tinted; the selection is put back after) and none of the bridge's own overlays. It shows what the view shows: its render method and filters, the bake's lighting once baked. `err minimised` when Radiant is minimised; covered or off screen is fine.
 - **A pose** (3D only) shoots from that camera and then puts the user's camera back; `err busy` while a mouse button is held.
+- **The 2D view** shows one axis at a time. `command View/Layout/Next (XY, YZ, XY)` turns it XY → XZ → YZ (the layout's other entries do not change it); a capture of an axis it does not show is `err not-found the 2D view shows <axis>` at once, and `err not-found` after 3 s when no 2D view is open (`command View/Toggle View Window/Active XY`). To frame a spot, put the camera over it, `action actionCenter_2D_On_Camera trigger`, and zoom with `View/Zoom/XY Zoom In`, `XY Zoom Out` or `XY 100%`; the summary gives the centre and scale reached.
 - **The reply summary** carries the view's projection: `w=<w> h=<h> origin=<x>,<y>,<z> angles=<pitch>,<yaw>,<roll> game_view=0|1` for `3d`, `w=<w> h=<h> centre=<x>,<y>,<z> scale=<pixels per unit>` for a 2D view (`xy` looks down, `xz` from the front, `yz` from the side).
 - **The reply body** is the pixels, `w × h × 4` bytes, BGRA, top row first; then, when the request listed world points, one `<px> <py>` line per point, in that frame's projection (`-` for a point behind the camera). The client places labels and boxes with these, so the image and the map agree without the client knowing Radiant's lens.
-- **Render modes** are Radiant's own actions (`actionTex_Real`, `actionTex_Unlit`, `actionTex_Wireframe`), read and switched with `action`; an unbaked map renders its floor black in the default one. A client that switches a mode switches it back.
+- **Render methods** are `View/Render Method/<method>` commands: `Wireframe`, `Fullbright`, `Normal-based Fake Lighting`, `View-Based Fake Lighting`, `Real Lighting`, `Tri Density`. An unbaked map is black under `Real Lighting`; a fake lighting shows a blockout. `state` gives the current one as `render=<method>` and the 2D view's axis as `view2d=XY (Top)|XZ|YZ` (the last it drew), so a client that changes either puts it back.
 - **Belongs to the client:** scaling to the agent's pixel budget, encoding, the labels drawn on the image, framing a target from its bounds, several angles in one sheet.
 
 ## Events
 
 | Event | Arguments |
 | --- | --- |
-| `console` | one line Radiant printed to its console, without its timestamp |
+| `console` | one entry of Radiant's console, without its timestamp: one print, whether or not it ends its line (a print of several lines is one event per line) |
 | `map` | `loaded <path>`, `saved <path>` or `scope <prefab depth> <path>` |
 
 ## Errors
