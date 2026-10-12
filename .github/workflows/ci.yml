@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  plugin:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T7RadiantBridge
+          path: build/Release/T7RadiantBridge.dll
+
+  client:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: tools/t7rb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/t7rb/go.mod
+      - name: Format
+        shell: bash
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./...

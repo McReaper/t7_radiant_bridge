@@ -1,2 +1,4 @@
 spike/plugin/out/
 spike/client/t7rb.exe
+build/
+tools/t7rb/t7rb.exe
