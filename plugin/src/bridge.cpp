@@ -158,9 +158,18 @@ namespace bridge
 
         void OnConsoleLine(const std::string& line) { Broadcast(kEventConsole, "0 console " + OneLine(line) + "\n"); }
 
+        // The host opens its What's New window, 3 s after start, when any plugin's version differs from the one in its
+        // [whatsnew] section: write ours first, so a bridge update never opens it (MTPlugins' own updates still do).
+        void MarkVersionSeen()
+        {
+            std::wstring ini = std::wstring(rp::host->PluginsRoot(rp::self)) + L"\\RadiantPlugins.ini";
+            WritePrivateProfileStringW(L"whatsnew", L"radiant.T7RadiantBridge", Wide(kPluginVersion).c_str(), ini.c_str());
+        }
+
         // ---- plugin callbacks -----------------------------------------------------------------------------
         int OnLoad(void)
         {
+            MarkVersionSeen();
             radiant::Bind();
             WNDCLASSEXW wc{};
             wc.cbSize = sizeof wc;

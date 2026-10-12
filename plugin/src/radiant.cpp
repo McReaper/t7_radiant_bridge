@@ -118,32 +118,14 @@ namespace bridge::radiant
 
         // ---- the console ------------------------------------------------------------------------------------
         std::atomic<LineFn> g_onLine{ nullptr };
-        std::mutex g_lineMutex;
-        std::string g_partial;
 
+        // One print is one entry of Radiant's console, line end or not ("All Probes Done (1.61 s)" has none);
+        // a print of several lines gives one line each.
         void Forward(const char* text)
         {
             LineFn fn = g_onLine.load();
             if (!fn || !text) return;
-            std::vector<std::string> lines;
-            {
-                std::lock_guard<std::mutex> lock(g_lineMutex);
-                g_partial += text;
-                size_t nl;
-                while ((nl = g_partial.find('\n')) != std::string::npos)
-                {
-                    std::string l = g_partial.substr(0, nl);
-                    if (!l.empty() && l.back() == '\r') l.pop_back();
-                    lines.push_back(std::move(l));
-                    g_partial.erase(0, nl + 1);
-                }
-                if (g_partial.size() > 65536)    // a print with no line end for that long: send what came
-                {
-                    lines.push_back(g_partial);
-                    g_partial.clear();
-                }
-            }
-            for (const std::string& l : lines) fn(l);
+            for (const std::string& l : Lines(text)) fn(l);
         }
 
         int HookedSysPrintf(const char* fmt, ...)
@@ -170,19 +152,20 @@ namespace bridge::radiant
         }
 
         // ---- raw calls, each behind SEH so a fault is a refusal rather than Radiant's crash ---------------
-        bool CallSetKey(void* e, const char* label, const MsvcString* k, const MsvcString* v)
+        // 1 set, 0 refused by Radiant, -1 faulted
+        int CallSetKey(void* e, const char* label, const MsvcString* k, const MsvcString* v)
         {
             __try
             {
                 g_undoBegin(label);
                 g_undoAddEntity(e);
-                g_setKeyValue(e, k, v);
+                bool set = g_setKeyValue(e, k, v);
                 g_undoEnd();
-                return true;
+                return set ? 1 : 0;
             }
             __except (EXCEPTION_EXECUTE_HANDLER)
             {
-                return false;
+                return -1;
             }
         }
 
@@ -286,7 +269,13 @@ namespace bridge::radiant
         if (g_undoIsOpen()) return "busy";
         std::string k = key, v = value;
         MsvcString rk = RadString(k), rv = RadString(v);
-        if (!CallSetKey(entity, Intern("set " + key), &rk, &rv)) return "Radiant faulted setting the key";
+        int set = CallSetKey(entity, Intern("set " + key), &rk, &rv);
+        if (set < 0) return "Radiant faulted setting the key";
+        if (set == 0)
+        {
+            rp::host->TriggerMenuAction(rp::self, "Edit/Undo");    // the step it left holds nothing
+            return "Radiant refused that value for " + key + ": a typed key (origin, angles) changes through replace";
+        }
         RefreshEntityInfo();
         rp::host->RequestRedraw(rp::self, MODTOOLS_VIEW_3D | MODTOOLS_VIEW_2D);
         return std::string();
@@ -297,9 +286,16 @@ namespace bridge::radiant
         char* bridge = Bridge();
         char* cam = bridge ? *reinterpret_cast<char**>(bridge + kBridgeCamWnd) : nullptr;
         if (!g_buildLighting || !cam) return "this Radiant build is not the one the bridge knows";
-        if (*reinterpret_cast<int*>(cam + kCamViewMode) != 4) return "the bake runs only under real lighting: action actionTex_Real trigger";
+        if (*reinterpret_cast<int*>(cam + kCamViewMode) != 4) return "the bake runs only under real lighting: command View/Render Method/Real Lighting";
         if (!CallBuildLighting(cam)) return "Radiant faulted starting the bake";
         return std::string();
+    }
+
+    int RenderMethod()
+    {
+        char* bridge = Bridge();
+        char* cam = bridge ? *reinterpret_cast<char**>(bridge + kBridgeCamWnd) : nullptr;
+        return cam ? *reinterpret_cast<int*>(cam + kCamViewMode) : -1;
     }
 
     std::string Action(const std::string& name, bool trigger, ActionState& out)

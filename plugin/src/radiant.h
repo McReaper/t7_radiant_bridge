@@ -27,6 +27,9 @@ namespace bridge::radiant
     // Starts the bake of the sun and the probes. "" or the reason it cannot.
     std::string Bake();
 
+    // The 3D view's render method, Radiant's own number (CCamWnd+232), -1 when unknown.
+    int RenderMethod();
+
     struct ActionState
     {
         bool checkable = false, checked = false, enabled = false;
