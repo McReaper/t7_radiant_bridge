@@ -5,42 +5,43 @@ How a client — t7kb — talks to the T7RadiantBridge plugin inside a running R
 ## Transport
 
 - One named pipe per Radiant: `\\.\pipe\t7_radiant_bridge_<pid>`, local only. Several clients may connect at once; each connection has its own thread in the plugin.
-- A **frame** is a 4-byte little-endian length, then that many bytes of payload.
+- A **frame** is a 4-byte little-endian length, then that many bytes of payload; a request is at most 64 MiB.
 - A **payload** is a header line (UTF-8, ending in `\n`) followed by a body (any bytes, possibly empty: map text, pixels).
 - A **request** header is `<id> <command> [args…]`. `<id>` is a positive integer the client picks, unique on its connection.
-- A **reply** header is `<id> ok [summary]` or `<id> err <code> <message>`; it carries the request's id. Replies to one connection come in request order.
+- A **reply** header is `<id> ok [summary]` or `<id> err <code> <message>`; it carries the request's id.
 - An **event** header is `0 <event> [args…]`, sent only to a connection that asked for it with `subscribe`.
 - Arguments are separated by single spaces. Where a command says "the rest", its last argument is the rest of the line and may hold spaces (a label, a menu path, a key's value).
 
 ## Radiant's main thread and dialogs
 
-- Every command runs on Radiant's main thread. The pipe threads hand requests to a message-only window of the plugin's own, so a command is served even while a dialog runs its modal loop (the host's idle tick stops then).
-- While a modal dialog is open, a command that changes the map, the selection, the camera or the views fails with `err busy <dialog title>`; reads still answer.
+- Every command runs on Radiant's main thread. The pipe threads hand requests to a message-only window of the plugin's own, so the plugin answers even while a dialog runs its modal loop (the host's idle tick stops then).
+- A connection's requests run one after the other, in order: a request starts once the one before it has replied (a capture waits for frames), so replies come in request order. While a capture runs, no other request starts.
+- While a modal dialog is open — the user's, or one a `command` opened — or a map is loading, `hello`, `state` and `menus` answer at once, out of turn, and every other request fails with `err busy <dialog title>`. `state` names the dialog.
 - A request is dropped, never run late, once its connection is closed.
-- An edit never leaves an undo group open across a Radiant command: `import`, `delete` and `replace` are each one undo step labelled as the client asks; `command` makes Radiant's own step.
-- The user's selection is put back after `import`, `delete`, `replace`, `setkey` and `capture`; only `select`, `deselect` and `command` change it.
+- An edit never leaves an undo group open across a Radiant command: `import`, `delete`, `replace` and `setkey` are each one undo step; `command` makes Radiant's own.
+- The user's selection is put back after `import`, `delete`, `replace` and `capture` (by GUID, without what was deleted); only `select`, `deselect` and `command` change it.
 
 ## Commands
 
 | Command | Request body | Reply summary / body |
 | --- | --- | --- |
-| `hello <protocol>` | | `<protocol> plugin=<version> host=<version> pid=<pid>`; `err version` when the plugin cannot serve the client's protocol |
-| `state` | | body: `key=value` lines — `map`, `modified`, `prefab_depth`, `entities`, `minimised` |
-| `entities [<guid>…]` | | body: the entities' text as Radiant writes it, all of them without arguments; summary `missing=<guid,…>` for unknown GUIDs |
-| `selection` | | body: one line per selected brush, `<brush guid> <entity guid> <min x y z> <max x y z>` |
-| `import <label…>` | entity text, worldspawn block first | body: one line per new entity, `<entity guid> <brush guid>…` |
-| `delete <label> <guid>…` | | summary `deleted=<n>`; a GUID names an entity (all its brushes) or one brush |
-| `replace <guid> <label…>` | the entity's new text | summary: the entity's GUID afterwards (a `misc_prefab` gets a new one) |
-| `setkey <guid> <key> [value…]` | | sets the key in place, worldspawn included; no value removes it |
-| `select <guid>…` / `deselect` | | the selection, as `selection` |
+| `hello <protocol>` | | first on a connection; `<protocol> plugin=<version> host=<version> pid=<pid>`; `err version` when the plugin cannot serve the client's protocol |
+| `state` | | body: `key=value` lines — `map`, `modified`, `prefab_depth`, `entities`, `selected`, `minimised`, `dialog` (empty when none) |
+| `entities [<guid>…]` | | body: the entities' text as Radiant writes it, all of them without arguments; summary `missing=<guid>,…` for unknown GUIDs |
+| `selection` | | body: one line per selected brush, `<brush guid> <entity guid> <min x> <min y> <min z> <max x> <max y> <max z>` |
+| `import <label…>` | entity text, worldspawn block first | body: one line per entity that got brushes, `<entity guid> <brush guid>…`, in import order |
+| `delete <label…>` | one entity or brush GUID per line | summary `deleted=<brushes>`; an entity GUID deletes the entity; `err not-found` deletes nothing; worldspawn is refused |
+| `replace <guid> <label…>` | the entity's new text | summary: the entity's GUID afterwards (a `misc_prefab` gets a new one); refused for worldspawn and `reflection_probe` |
+| `setkey <guid> <key> [<value…>]` | | sets the key in place to the rest of the line (empty allowed), worldspawn included; `guid` and `classname` are refused; removing a key is a `replace` |
+| `select <guid>…` / `deselect` | | the selection, as `selection`; summary `missing=<guid>,…` |
 | `command <menu path…>` | | runs a Radiant menu entry (`Selection/CSG/CSG Hollow`) on the current selection; `err missing`, `err disabled` |
-| `menus [<menu path…>]` | | body: one `label<TAB>enabled<TAB>has_submenu` line per entry |
-| `camera [<x> <y> <z> <pitch> <yaw> <roll>]` | | the camera, after setting it when given (degrees; positive pitch looks up) |
-| `capture 3d\|xy\|xz\|yz [<x> <y> <z> <pitch> <yaw> <roll>]` | optional: one `x y z` world point per line | a view's frame and its projection, see [Vision](#vision) |
+| `menus [<menu path…>]` | | body: one `label<TAB>enabled<TAB>has_submenu` line per entry (`---` a separator) |
 | `action <name> [trigger]` | | a named action of Radiant's (`actionTex_Unlit`), triggered when asked; summary `checkable=0\|1 checked=0\|1 enabled=0\|1` afterwards; `err not-found` |
-| `bake` | | starts the lighting bake; its end comes as the `bake` event |
-| `save` | | saves the open map (File > Save) |
-| `reload <path…>` | | opens a map without any prompt, unsaved changes lost; `err busy` while a mouse button is held |
+| `camera [<x> <y> <z> <pitch> <yaw> <roll>]` | | summary: the camera, after setting it when given (degrees; positive pitch looks up, yaw 90 faces +y) |
+| `capture 3d\|xy\|xz\|yz [<x> <y> <z> <pitch> <yaw> <roll>]` | optional: one `x y z` world point per line | a view's frame and its projection, see [Vision](#vision) |
+| `bake` | | starts Radiant's lighting bake (sun and probes), which ends with the console line `All Probes Done (<s> s)`; refused unless the 3D view shows real lighting |
+| `save` | | saves the open map (File > Save); refused for an unnamed map |
+| `reload <path…>` | | opens a map without any prompt, unsaved changes lost; `err busy` while a mouse button is held, refused inside a prefab |
 | `subscribe <event>…` | | starts sending these events on this connection |
 
 ## Vision
@@ -60,11 +61,10 @@ How a client — t7kb — talks to the T7RadiantBridge plugin inside a running R
 | --- | --- |
 | `console` | one line Radiant printed to its console, without its timestamp |
 | `map` | `loaded <path>`, `saved <path>` or `scope <prefab depth> <path>` |
-| `bake` | `done <seconds>` |
 
 ## Errors
 
-`err <code> <message>`, with `<code>` one of `bad-request` (unknown command, wrong arguments), `version`, `busy`, `not-found` (no such GUID or view), `refused` (Radiant refused the edit), `missing` / `disabled` (menu entries), `minimised`.
+`err <code> <message>`, with `<code>` one of `bad-request` (unknown command, wrong arguments, a request before `hello`), `version`, `busy`, `not-found` (no such GUID, view or action), `refused` (Radiant refused, or the plugin does not do that), `missing` / `disabled` (menu entries), `minimised`.
 
 ## Versions
 
