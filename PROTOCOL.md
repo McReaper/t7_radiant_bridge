@@ -67,6 +67,8 @@ How a client — t7kb — talks to the T7RadiantBridge plugin inside a running R
 
 `err <code> <message>`, with `<code>` one of `bad-request` (unknown command, wrong arguments, a request before `hello`), `version`, `busy`, `not-found` (no such GUID, view or action), `refused` (Radiant refused, or the plugin does not do that), `missing` / `disabled` (menu entries), `minimised`.
 
+A request whose id the plugin cannot read (not 1 to 18 digits) is answered under id 0, `0 err bad-request <why>`: there is no id to answer it with, and a client tells it from an event by its `err`.
+
 ## Versions
 
 `hello` comes first on a connection. The protocol number changes only when a command changes meaning; adding a command, an argument with a default or an event does not change it, so a client checks the commands it needs against the plugin version `hello` reports.
