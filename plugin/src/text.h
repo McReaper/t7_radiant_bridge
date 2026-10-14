@@ -46,4 +46,21 @@ namespace bridge
     std::string Num3(const float v[3]);                       // "x,y,z"
     bool CleanValue(const std::string& s);                    // no double quote or line break, Radiant's rule for keys and values
     std::string OneLine(std::string s);                       // line breaks to spaces, for a header line
+
+    // An edit's body: what to delete, the point entities to replace in place (keeping their GUIDs), and the text to
+    // import. Sections start at a line "delete <guid>…", "replace <guid>" or "import"; the lines after a replace or an
+    // import, up to the next section, are its text, kept verbatim.
+    struct EditPlan
+    {
+        std::vector<std::string> deletes;
+        std::vector<std::pair<std::string, std::string>> replaces;   // GUID, the entity's new text
+        std::string import;
+    };
+    bool ParseEdit(const std::string& body, EditPlan& out, std::string& why);
+
+    // Whether entity text is what Radiant's import reads, checked before it gets any: Radiant takes a line it cannot
+    // parse for a fatal error (an "EntityDef::Parse" dialog, then a failed assertion), not for a refusal. Entities hold
+    // guid, layer and "key" "value" lines and brushes; a brush its guid, layer and contents lines and either four faces
+    // or more, each through three points that make a plane, or one curve or mesh patch of v vertex rows.
+    bool CheckMapText(const std::string& text, std::string& why);
 }

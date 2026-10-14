@@ -8,7 +8,7 @@
 
 namespace bridge
 {
-    constexpr const char* kPluginVersion = "1.0.0";
+    constexpr const char* kPluginVersion = "1.1.0";
 
     // The requests that answer while a modal dialog is open.
     bool IsFast(const std::string& command);

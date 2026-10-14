@@ -202,9 +202,26 @@ namespace bridge
 
         Reply Selection(Call&) { return Ok(std::string(), SelectionText()); }
 
+        // What an import added, which it leaves selected: one "<entity guid> <brush guid>…" line per entity, in order.
+        std::string ImportedRows()
+        {
+            std::vector<std::string> order;
+            std::unordered_map<std::string, std::string> rows;
+            for (const ModToolsSelectedBrush& s : rp::GetSelection())
+            {
+                if (!rows.count(s.entityGuid)) order.push_back(s.entityGuid);
+                rows[s.entityGuid] += std::string(" ") + s.brushGuid;
+            }
+            std::string out;
+            for (const std::string& e : order) out += e + rows[e] + "\n";
+            return out;
+        }
+
         Reply Import(Call& c)
         {
             if (c.body.empty()) return Err("bad-request", "import needs entity text in its body, worldspawn block first");
+            std::string bad;
+            if (!CheckMapText(c.body, bad)) return Err("bad-request", bad);
             std::string label = Label(c.h.args, 0, "t7kb import");
             std::vector<Picked> saved = SaveSelection();
             rp::host->DeselectAll(rp::self);
@@ -213,18 +230,95 @@ namespace bridge
                 RestoreSelection(saved);
                 return Err("refused", "Radiant refused the text");
             }
-            // the import leaves what it added selected
-            std::vector<std::string> order;
-            std::unordered_map<std::string, std::string> rows;
-            for (const ModToolsSelectedBrush& s : rp::GetSelection())
-            {
-                if (!rows.count(s.entityGuid)) order.push_back(s.entityGuid);
-                rows[s.entityGuid] += std::string(" ") + s.brushGuid;
-            }
+            std::string out = ImportedRows();
             RestoreSelection(saved);
-            std::string out;
-            for (const std::string& e : order) out += e + rows[e] + "\n";
             return Ok(std::string(), out);
+        }
+
+        // Why a point entity cannot be replaced in place, "" when it can: Radiant's undo brings an entity that owns
+        // brushes back as world brushes, and a reflection_probe cannot be rebuilt.
+        std::string Unreplaceable(ModToolsEntity e, const std::string& guid)
+        {
+            if (!e) return "not-found";
+            if (e == rp::host->WorldEntity(rp::self)) return "worldspawn cannot be replaced: set its keys with setkey";
+            if (!rp::EntityFixedSize(e)) return guid + " owns brushes, which Radiant's undo would bring back as world brushes: delete it and import its new text";
+            if (_stricmp(rp::GetKey(e, "classname").c_str(), "reflection_probe") == 0) return "a reflection_probe cannot be replaced in place: delete it and import its new text";
+            return std::string();
+        }
+
+        // Deletes, point entities replaced in place and new objects, as one undo step. Everything goes first, then one
+        // import of the new text followed by the replaced entities', the last entities imported, which get their GUIDs
+        // back. A failure after the first change undoes the whole step.
+        Reply Edit(Call& c)
+        {
+            EditPlan plan;
+            std::string why;
+            if (!ParseEdit(c.body, plan, why)) return Err("bad-request", why);
+            if (!Trim(plan.import).empty() && !CheckMapText(plan.import, why)) return Err("bad-request", "import: " + why);
+            for (const auto& rp : plan.replaces)
+                if (!CheckMapText(rp.second, why)) return Err("bad-request", "replace " + rp.first + ": " + why);
+            if (!rp::Has(&rp::host->EndUndo) || !rp::host->BeginUndo || !rp::host->EndUndo) return Err("refused", "this MTPlugins cannot make one undo step of several edits: update it");
+            if (!plan.replaces.empty() && !(rp::Has(&rp::host->RestampImportedEntities) && rp::host->RestampImportedEntities))
+                return Err("refused", "this MTPlugins cannot give a replaced entity its GUID back: update it");
+            std::string world = WorldGuid();
+            for (const std::string& g : plan.deletes)
+                if (_stricmp(g.c_str(), world.c_str()) == 0) return Err("refused", "worldspawn cannot be deleted");
+            std::vector<std::string> targets = plan.deletes, replaced;
+            for (const auto& r : plan.replaces) replaced.push_back(r.first);
+            std::vector<ModToolsEntity> ents = rp::FindEntitiesByGuid(replaced);
+            for (size_t i = 0; i < ents.size(); ++i)
+            {
+                std::string no = Unreplaceable(ents[i], replaced[i]);
+                if (no == "not-found") return Err("not-found", replaced[i]);
+                if (!no.empty()) return Err("refused", no);
+            }
+            targets.insert(targets.end(), replaced.begin(), replaced.end());
+            std::string label = Label(c.h.args, 0, "t7kb edit");
+            std::vector<Picked> saved = SaveSelection();
+            std::vector<std::string> missing;
+            std::vector<ModToolsBrush> brushes = Resolve(targets, missing);    // deselects everything
+            if (!missing.empty())
+            {
+                RestoreSelection(saved);
+                return Err("not-found", Join(missing, ','));
+            }
+            std::string text = Trim(plan.import).empty() ? std::string(rp::detail::EmptyWorldBlock()) : plan.import;
+            std::vector<std::string> brushGuids;
+            std::vector<size_t> counts;
+            for (const auto& r : plan.replaces)
+            {
+                text += r.second;
+                std::vector<std::string> bg = rp::BrushGuidsInText(r.second);
+                counts.push_back(bg.size());
+                brushGuids.insert(brushGuids.end(), bg.begin(), bg.end());
+            }
+            bool importing = !Trim(plan.import).empty() || !plan.replaces.empty();
+            Reply r = Ok("deleted=" + std::to_string(brushes.size()));
+            bool changed = false;
+            rp::host->BeginUndo(rp::self, label.c_str());
+            if (!brushes.empty())
+            {
+                if (rp::host->DeleteBrushes(rp::self, brushes.data(), brushes.size(), label.c_str())) changed = true;
+                else r = Err("refused", "Radiant refused the delete");
+            }
+            if (r.ok && importing)
+            {
+                if (!rp::host->ImportMapText(rp::self, text.c_str(), label.c_str())) r = Err("refused", "Radiant refused the text to import");
+                else
+                {
+                    changed = true;
+                    std::vector<const char*> eg, bg;
+                    for (const std::string& g : replaced) eg.push_back(g.c_str());
+                    for (const std::string& g : brushGuids) bg.push_back(g.c_str());
+                    if (!eg.empty() && rp::host->RestampImportedEntities(rp::self, eg.data(), eg.size(), bg.data(), counts.data()) != eg.size())
+                        r = Err("refused", "Radiant could not give the replaced entities their GUIDs back");
+                    else r.body = ImportedRows();
+                }
+            }
+            rp::host->EndUndo(rp::self);
+            if (!r.ok && changed) rp::host->TriggerMenuAction(rp::self, "Edit/Undo");
+            RestoreSelection(saved);
+            return r;
         }
 
         Reply Delete(Call& c)
@@ -250,6 +344,8 @@ namespace bridge
         Reply Replace(Call& c)
         {
             if (c.w.empty() || c.body.empty()) return Err("bad-request", "replace <guid> <label…>, with the entity's new text in its body");
+            std::string bad;
+            if (!CheckMapText(c.body, bad)) return Err("bad-request", bad);
             const std::string guid = c.w[0];
             std::string label = Label(c.h.args, 1, "t7kb replace");
             ModToolsEntity e = rp::FindEntitiesByGuid({ guid })[0];
@@ -515,6 +611,7 @@ namespace bridge
             { "import", Import, false },
             { "delete", Delete, false },
             { "replace", Replace, false },
+            { "edit", Edit, false },
             { "setkey", SetKey, false },
             { "select", Select, false },
             { "deselect", Deselect, false },
