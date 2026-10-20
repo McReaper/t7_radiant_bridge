@@ -1,0 +1,43 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag is the plugin's version
+        shell: bash
+        run: |
+          version=$(sed -n 's/.*kPluginVersion = "\([^"]*\)".*/\1/p' plugin/src/commands.h)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "the tag is $GITHUB_REF_NAME but plugin/src/commands.h says $version"
+            exit 1
+          fi
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/T7RadiantBridge | Out-Null
+          Copy-Item build/Release/T7RadiantBridge.dll, LICENSE dist/T7RadiantBridge/
+          Compress-Archive -Path dist/T7RadiantBridge -DestinationPath T7RadiantBridge.zip
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'EOF'
+          **Install:** install [MTPlugins](https://github.com/Aidan601/MTPlugins), then unzip `T7RadiantBridge.zip` into `<BO3 root>/bin/plugins/` and start Radiant. To update, close Radiant and unzip over the old one. Its client is [t7kb](https://github.com/McReaper/t7_companion): [Radiant integration](https://github.com/McReaper/t7_companion/blob/main/docs/radiant.md).
+          EOF
+          gh release create "$GITHUB_REF_NAME" T7RadiantBridge.zip --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes
