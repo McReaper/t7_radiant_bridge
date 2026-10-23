@@ -49,8 +49,22 @@ target_compile_options(host_pure PRIVATE ${BRIDGE_WARNINGS})
 add_library(T7RadiantBridgeStandalone SHARED
   host/dllmain.cpp
   host/log.cpp
-  host/coexist.cpp)
-target_link_libraries(T7RadiantBridgeStandalone PRIVATE host_pure user32)
+  host/coexist.cpp
+  host/rt.cpp
+  host/hooks.cpp
+  host/editor.cpp
+  host/mainwindow.cpp
+  host/seh.cpp
+  host/plugin.cpp
+  host/hostapi.cpp
+  plugin/src/bridge.cpp
+  plugin/src/commands.cpp
+  plugin/src/pipe.cpp
+  plugin/src/radiant.cpp
+  plugin/src/text.cpp)
+target_include_directories(T7RadiantBridgeStandalone PRIVATE host plugin/src third_party/minhook/include)
+target_include_directories(T7RadiantBridgeStandalone SYSTEM PRIVATE third_party/mtplugins_sdk)
+target_link_libraries(T7RadiantBridgeStandalone PRIVATE host_pure minhook user32 gdi32 ole32)
 target_compile_definitions(T7RadiantBridgeStandalone PRIVATE T7RB_STANDALONE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(T7RadiantBridgeStandalone PRIVATE ${BRIDGE_WARNINGS} /EHsc)
 
