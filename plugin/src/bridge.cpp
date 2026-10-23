@@ -162,8 +162,11 @@ namespace bridge
         // [whatsnew] section: write ours first, so a bridge update never opens it (MTPlugins' own updates still do).
         void MarkVersionSeen()
         {
+#ifndef T7RB_STANDALONE
+            // Only MTPlugins has a What's New window to suppress; the standalone host has no RadiantPlugins.ini.
             std::wstring ini = std::wstring(rp::host->PluginsRoot(rp::self)) + L"\\RadiantPlugins.ini";
             WritePrivateProfileStringW(L"whatsnew", L"radiant.T7RadiantBridge", Wide(kPluginVersion).c_str(), ini.c_str());
+#endif
         }
 
         // ---- plugin callbacks -----------------------------------------------------------------------------

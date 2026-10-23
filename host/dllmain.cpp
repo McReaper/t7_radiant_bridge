@@ -12,6 +12,7 @@
 #include <string>
 #include "exe.h"
 #include "coexist.h"
+#include "hooks.h"
 #include "log.h"
 
 namespace
@@ -87,7 +88,14 @@ namespace
 
         if (!VerifyRadiant()) return 0;
 
-        HLOG("host: Radiant verified, MTPlugins absent. Milestone 1: ready, no hooks installed yet.");
+        // The hooks are installed off the main thread (MinHook suspends it to patch).
+        // The idle-tick hook loads the bridge on its first run and drives it after.
+        if (!host::hooks::Install())
+        {
+            HLOG("host: could not install the hooks: staying passive");
+            return 0;
+        }
+        HLOG("host: Radiant verified, MTPlugins absent, hooks installed. The bridge loads on the first idle tick.");
         return 0;
     }
 }
