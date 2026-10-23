@@ -123,6 +123,55 @@ namespace host::hostapi
             return n;
         }
 
+        void H_ForEachEntityBrush(ModToolsPlugin*, ModToolsEntity e, ModToolsBrushFn fn, void* user)
+        {
+            if (fn) host::editor::ForEachEntityBrush(e, [&](void* b) { fn(b, user); });
+        }
+        int H_BrushGuid(ModToolsPlugin*, ModToolsBrush b, char out[40])
+        {
+            std::string g = host::editor::BrushGuid(b);
+            if (g.empty() || g.size() >= 40) return 0;
+            strcpy_s(out, 40, g.c_str());
+            return 1;
+        }
+        ModToolsEntity H_BrushOwner(ModToolsPlugin*, ModToolsBrush b) { return host::editor::BrushOwner(b); }
+        ModToolsEntity H_WorldEntity(ModToolsPlugin*) { return host::editor::WorldEntity(); }
+        ModToolsBrush H_BrushOfInst(ModToolsPlugin*, ModToolsBrushInst inst) { return host::editor::BrushOfInst(inst); }
+        size_t H_SelectedBrushInsts(ModToolsPlugin*, ModToolsBrushInst* out, size_t cap)
+        {
+            std::vector<void*> v = host::editor::SelectedBrushInsts();
+            for (size_t i = 0; i < v.size() && i < cap && out; ++i) out[i] = v[i];
+            return v.size();
+        }
+
+        char* DupString(const std::string& s)
+        {
+            char* p = static_cast<char*>(malloc(s.size() + 1));
+            if (p) { memcpy(p, s.data(), s.size()); p[s.size()] = 0; }
+            return p;
+        }
+        char* H_WriteEntityText(ModToolsPlugin*, ModToolsEntity e)
+        {
+            std::string t;
+            return host::editor::WriteEntityText(e, t) ? DupString(t) : nullptr;
+        }
+        char* H_WriteEntityTextWith(ModToolsPlugin*, ModToolsEntity e, const ModToolsBrush* brushes, size_t n)
+        {
+            std::vector<void*> extra(brushes, brushes + n);
+            std::string t;
+            return host::editor::WriteEntityTextWith(e, extra, t) ? DupString(t) : nullptr;
+        }
+        void H_FreeString(ModToolsPlugin*, char* s) { free(s); }
+        size_t H_FindEntitiesByGuid(ModToolsPlugin*, const char* const* guids, size_t n, ModToolsEntity* out)
+        {
+            std::vector<std::string> keys(n);
+            for (size_t i = 0; i < n; ++i) keys[i] = guids[i] ? guids[i] : "";
+            std::vector<void*> found = host::editor::FindEntitiesByGuid(keys);
+            size_t got = 0;
+            for (size_t i = 0; i < n; ++i) { out[i] = found[i]; if (found[i]) ++got; }
+            return got;
+        }
+
         // ---- raw ----
         void* H_RadiantAddress(ModToolsPlugin*, uintptr_t ida) { return rt::VerifyBinary() ? reinterpret_cast<void*>(rt::Rva(ida)) : nullptr; }
         int H_Detour(ModToolsPlugin*, void* target, void* detour, void** original) { return host::hooks::Detour(target, detour, original) ? 1 : 0; }
@@ -161,8 +210,18 @@ namespace host::hostapi
             t.GetCamera = H_GetCamera;
             t.SetCamera = H_SetCamera;
             t.ForEachEntity = H_ForEachEntity;
+            t.ForEachEntityBrush = H_ForEachEntityBrush;
             t.EntityGuid = H_EntityGuid;
+            t.BrushGuid = H_BrushGuid;
+            t.BrushOwner = H_BrushOwner;
+            t.WorldEntity = H_WorldEntity;
             t.GetSelection = H_GetSelection;
+            t.SelectedBrushInsts = H_SelectedBrushInsts;
+            t.BrushOfInst = H_BrushOfInst;
+            t.WriteEntityText = H_WriteEntityText;
+            t.WriteEntityTextWith = H_WriteEntityTextWith;
+            t.FreeString = H_FreeString;
+            t.FindEntitiesByGuid = H_FindEntitiesByGuid;
             t.RadiantAddress = H_RadiantAddress;
             t.Detour = H_Detour;
             t.App = H_App;

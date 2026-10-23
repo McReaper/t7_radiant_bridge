@@ -35,7 +35,7 @@ namespace host::seh
             wchar_t name[MAX_PATH] = L"?";
             if (mod) GetModuleFileNameW(mod, name, MAX_PATH);
             uintptr_t off = g_addr && mod ? reinterpret_cast<uintptr_t>(g_addr) - reinterpret_cast<uintptr_t>(mod) : 0;
-            HLOG("host: plugin faulted in %s (exception 0x%08X at %ls+0x%llX): disabled", what, g_code, name, static_cast<unsigned long long>(off));
+            HLOG("host: plugin faulted in %s (exception 0x%08X at 0x%p = %ls+0x%llX): disabled", what, g_code, g_addr, name, static_cast<unsigned long long>(off));
         }
     }
 

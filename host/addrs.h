@@ -40,13 +40,18 @@ namespace host::rt
     constexpr size_t off_CamWnd_Angles = 220;             // float[3]
 
     // --- entities / brushes / selection ---
+    constexpr uintptr_t Entity_Write = 0x140C8FCF0;       // (entity_t*, FILE*, char selectedOnly): "{ guid ... }" + brushes
     constexpr uintptr_t g_entityList = 0x14522B440;       // global entity list sentinel
+    constexpr uintptr_t g_worldEntity = 0x14522B438;      // EntityInst* of worldspawn (entity_t at +0), set by Map_LoadFile
     constexpr uintptr_t g_selectedBrushes = 0x1453A2278;  // BrushCollection "... - Selected Brushes"
     constexpr size_t off_Collection_List = 56;            // -> list sentinel
-    constexpr size_t off_Entity_BrushNext = 8;            // the entity's brush list next
+    constexpr size_t off_EInst_Entity = 0;                // entity_t* inside an EntityInst
+    constexpr size_t off_Entity_BrushPrev = 0;            // the entity's brush list sentinel (prev/next of its brushes)
+    constexpr size_t off_Entity_BrushNext = 8;
     constexpr size_t off_Entity_ListNext = 448;           // global entity list next
     constexpr size_t off_Entity_Guid = 352;               // GUID (16 bytes)
-    constexpr size_t off_Brush_Next = 8;                  // links in the owning entity's list
+    constexpr size_t off_Brush_Prev = 0;                  // links in the owning entity's list
+    constexpr size_t off_Brush_Next = 8;
     constexpr size_t off_Brush_Owner = 16;                // entity_t*
     constexpr size_t off_Brush_Guid = 48;                 // GUID (16 bytes)
     constexpr size_t off_Brush_Mins = 64;                 // float[3]
