@@ -75,4 +75,4 @@ A request whose id the plugin cannot read (not 1 to 18 digits) is answered under
 
 `hello` comes first on a connection. The protocol number changes only when a command changes meaning; adding a command, an argument with a default or an event does not change it, so a client checks the commands it needs against the plugin version `hello` reports.
 
-Plugin 1.1.0, the first release, serves everything above. A command added later is marked here with the version that brought it.
+Plugin 1.2.0, the first release, serves everything above. A command added later is marked here with the version that brought it.

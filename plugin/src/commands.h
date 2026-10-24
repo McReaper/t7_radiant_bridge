@@ -5,11 +5,10 @@
 #include "modtools_plugin.h"
 #include "pipe.h"
 #include "text.h"
+#include "version.h"
 
 namespace bridge
 {
-    constexpr const char* kPluginVersion = "1.1.0";
-
     // The requests that answer while a modal dialog is open.
     bool IsFast(const std::string& command);
 

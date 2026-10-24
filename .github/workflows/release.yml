@@ -12,14 +12,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: The tag is the plugin's version
+      - name: The tag is the bridge's version
+        id: version
         shell: bash
         run: |
-          version=$(sed -n 's/.*kPluginVersion = "\([^"]*\)".*/\1/p' plugin/src/commands.h)
+          version=$(sed -n 's/.*kPluginVersion = "\([^"]*\)".*/\1/p' plugin/src/version.h)
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "the tag is $GITHUB_REF_NAME but plugin/src/commands.h says $version"
+            echo "the tag is $GITHUB_REF_NAME but plugin/src/version.h says $version"
             exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Configure
         run: cmake -S . -B build -A x64
       - name: Build
@@ -28,16 +30,14 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Package
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist/T7RadiantBridge | Out-Null
-          Copy-Item build/Release/T7RadiantBridge.dll, LICENSE dist/T7RadiantBridge/
-          Compress-Archive -Path dist/T7RadiantBridge -DestinationPath T7RadiantBridge.zip
+        run: ./tools/package.ps1 -Version "${{ steps.version.outputs.version }}"
       - name: Publish
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           cat > notes.md <<'EOF'
-          **Install:** install [MTPlugins](https://github.com/Aidan601/MTPlugins), then unzip `T7RadiantBridge.zip` into `<BO3 root>/bin/plugins/` and start Radiant. To update, close Radiant and unzip over the old one. Its client is [t7kb](https://github.com/McReaper/t7_companion): [Radiant integration](https://github.com/McReaper/t7_companion/blob/main/docs/radiant.md).
+          **Install:** [t7kb](https://github.com/McReaper/t7_companion) ships this release and loads it into Radiant when it opens a map: nothing to install by hand. What an agent does with it: [Radiant integration](https://github.com/McReaper/t7_companion/blob/main/docs/radiant.md).
           EOF
-          gh release create "$GITHUB_REF_NAME" T7RadiantBridge.zip --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes
+          gh release create "$GITHUB_REF_NAME" "T7RadiantBridge-$VERSION.zip" --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes

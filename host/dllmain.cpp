@@ -2,11 +2,9 @@
 // runs in a Radiant that MTPlugins doesn't load into. t7kb injects it
 // (LoadLibraryW) when it opens a map; nothing is written into the BO3 install.
 //
-// Milestone 1 (this file as it stands): the DLL loads off the loader lock,
-// steps aside when MTPlugins is present, checks the Radiant build, and logs.
-// It installs no hooks and loads no plugin yet — safe to inject and confirm the
-// loading end to end. The hooks, the host-API table and the plugin dispatch
-// come next, each tested live.
+// The DLL starts off the loader lock, steps aside when MTPlugins is present,
+// checks the Radiant build, then installs its hooks; the bridge loads on
+// Radiant's first idle tick (hooks.cpp).
 #include <windows.h>
 #include <cwctype>
 #include <string>
@@ -14,12 +12,13 @@
 #include "coexist.h"
 #include "hooks.h"
 #include "log.h"
+#include "version.h"
 
 namespace
 {
     HMODULE g_self = nullptr;
 
-    constexpr const char* kHostVersion = "1.2.0";
+    constexpr const char* kHostVersion = bridge::kPluginVersion;   // one number for both
 
     std::wstring ExeName()
     {
