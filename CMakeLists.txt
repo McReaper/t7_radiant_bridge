@@ -54,6 +54,7 @@ add_library(T7RadiantBridgeStandalone SHARED
   host/hooks.cpp
   host/editor.cpp
   host/mainwindow.cpp
+  host/qt.cpp
   host/seh.cpp
   host/plugin.cpp
   host/hostapi.cpp
