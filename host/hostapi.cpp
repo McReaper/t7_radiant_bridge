@@ -2,13 +2,15 @@
 // Copyright (C) 2026 Figglebottom and contributors, GNU GPL v3 like the rest of this repository.
 //
 // The host-API table, filled with the entries the bridge's reads (hello, state, entities, selection), edits (import,
-// delete, edit, replace, setkey, select) and reload use. The Qt menu and capture entries answer "nothing there" until
-// they are served; entries no bridge command calls stay null (host->size spans the whole struct).
+// delete, edit, replace, setkey, select), reload and menus (command, menus, save, action) use. The capture entries
+// answer "nothing there" until they are served; entries no bridge command calls stay null (host->size spans the whole
+// struct).
 #include "hostapi.h"
 #include "addrs.h"
 #include "editor.h"
 #include "hooks.h"
 #include "mainwindow.h"
+#include "qt.h"
 #include "log.h"
 #include "modtools_plugin.h"
 #include <windows.h>
@@ -238,21 +240,28 @@ namespace host::hostapi
         int H_ReloadMap(ModToolsPlugin*, const wchar_t* path, int keepCamera) { return path && host::hooks::ReloadMap(path, keepCamera != 0) ? 1 : 0; }
         int H_IsReloading(ModToolsPlugin*) { return host::hooks::IsReloading() ? 1 : 0; }
 
-        // ---- not yet served: the Qt menus and the view capture (M2d) ----
-        // The bridge calls these without a null check, and a call through a null entry would fault and disable it for
-        // the session: each answers "nothing there" instead, which the bridge reports as an error. The edit rollback
-        // (TriggerMenuAction "Edit/Undo") runs on a path that already failed: 0 leaves that operation as one undo
-        // step the user can reverse with Ctrl+Z.
+        // ---- the editor's menus and named widgets ----
+        // 1 triggered, 0 no such entry, -1 disabled
         int H_TriggerMenuAction(ModToolsPlugin*, const char* path)
         {
-            HLOG("host: TriggerMenuAction('%s') before the Qt menu bridge: ignored", path ? path : "");
-            return 0;
+            void* a = path ? host::qt::FindMenuAction(path) : nullptr;
+            if (!a) return 0;
+            if (!host::qt::ActionEnabled(a)) return -1;
+            HLOG("host: menu action '%s'", path);
+            host::qt::TriggerAction(a);
+            return 1;
         }
-        size_t H_MenuEntries(ModToolsPlugin*, const char*, char* out, size_t cap)
+        size_t H_MenuEntries(ModToolsPlugin*, const char* path, char* out, size_t cap)
         {
-            if (out && cap) out[0] = 0;
-            return 0;
+            std::string s = host::qt::DescribeMenu(path ? path : "");
+            if (out && cap) { size_t n = s.size() < cap - 1 ? s.size() : cap - 1; memcpy(out, s.data(), n); out[n] = 0; }
+            return s.size();
         }
+        ModToolsWidget W_FindEditorWidget(const char* name) { return host::qt::FindEditorWidget(name); }
+
+        // ---- not yet served: the view capture (M2d) ----
+        // The bridge calls these without a null check, and a call through a null entry would fault and disable it for
+        // the session: each answers "nothing there" instead, which the bridge reports as an error.
         void* H_CamWindow(ModToolsPlugin*) { return nullptr; }
         void* H_XYWindow(ModToolsPlugin*, int) { return nullptr; }
         int H_Project(ModToolsPlugin*, const float*, float* sx, float* sy)
@@ -326,8 +335,17 @@ namespace host::hostapi
             t.RestampImportedEntities = H_RestampImportedEntities;
             t.ReloadMap = H_ReloadMap;
             t.IsReloading = H_IsReloading;
-            // M2d stubs
+            // the editor's menus and named widgets (command, menus, save, action)
             t.MenuEntries = H_MenuEntries;
+            if (host::qt::Bind())
+            {
+                // only the entry the bridge reads; host->ui->size spans the whole struct, the rest stay null
+                static ModToolsUiApi ui{};
+                ui.size = sizeof ui;
+                ui.FindEditorWidget = W_FindEditorWidget;
+                t.ui = &ui;
+            }
+            // M2d stubs
             t.CamWindow = H_CamWindow;
             t.XYWindow = H_XYWindow;
             t.Project = H_Project;

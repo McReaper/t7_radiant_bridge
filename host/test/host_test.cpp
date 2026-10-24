@@ -1,5 +1,5 @@
 // Tests the host logic that needs no Radiant: the exe identity read on a
-// buffer, and the menu-label key.
+// buffer, and how a menu path picks its entries.
 #include "exe.h"
 #include "menukey.h"
 #include <cstdio>
@@ -54,6 +54,20 @@ int main()
     Check(MenuKey("Save As...") == "save as", "drops trailing dots and lowercases");
     Check(MenuKey("Undo\tCtrl+Z") == "undo", "drops the accelerator after a tab");
     Check(MenuKey("CSG/Make Detail  ") == "csg/make detail", "drops trailing spaces");
+
+    Check(MenuPathSegments("File/Save") == std::vector<std::string>{ "File", "Save" }, "splits a path at '/'");
+    Check(MenuPathSegments("Edit") == std::vector<std::string>{ "Edit" }, "a single segment");
+    Check(MenuPathSegments("") == std::vector<std::string>{ "" }, "an empty path is one empty segment");
+    Check(MenuPathSegments("View/") == std::vector<std::string>{ "View", "" }, "a trailing '/' ends with an empty segment");
+
+    std::vector<MenuEntry> edit = { { "&Undo Paste\tCtrl+Z" }, { "", true }, { "Undo" }, { "Cut" }, { "Select &All..." } };
+    Check(FindMenuEntry(edit, "undo") == 2, "an exact key wins over an earlier word prefix");
+    Check(FindMenuEntry(edit, "Select All") == 4, "matches without '&', dots or case");
+    Check(FindMenuEntry(edit, "Copy") == -1, "an absent entry is -1");
+    std::vector<MenuEntry> undoOnly = { { "Undo Paste" }, { "Undone" } };
+    Check(FindMenuEntry(undoOnly, "Undo") == 0, "a word prefix matches when no key is equal");
+    Check(FindMenuEntry({ { "Undone" } }, "Undo") == -1, "a prefix inside a word does not match");
+    Check(FindMenuEntry({ { "", true } }, "") == -1, "a separator never matches");
 
     if (g_fail == 0) printf("host_test: all passed\n");
     return g_fail == 0 ? 0 : 1;
