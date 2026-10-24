@@ -21,7 +21,7 @@
     <a href="#-license">License</a>
 </p>
 
-A plugin for Radiant, Black Ops III's map editor, that lets another program drive it the way a mapper does: read the open map, edit it with undo, run Radiant's own commands, move the camera and capture the views. It serves a named-pipe protocol, [PROTOCOL.md](PROTOCOL.md), so any program on the same machine can be its client: an AI agent's tools, a script, a test. [T7 Companion](https://github.com/McReaper/t7_companion) is one, and ships the bridge to its users.
+A plugin for Radiant, the Black Ops III mod tools' level editor, that lets another program drive it the way a mapper does: read the open map, edit it with undo, run Radiant's own commands, move the camera and capture the views. It serves a named-pipe protocol, [PROTOCOL.md](PROTOCOL.md), so any program on the same machine can be its client: an AI agent's tools, a script, a test. [T7 Companion](https://github.com/McReaper/t7_companion) is one, and ships the bridge to its users.
 
 > [!NOTE]
 > T7 Radiant Bridge is one plugin, not a plugin host: it loads no other plugin and has no UI. Its standalone host only carries the bridge, for a client to load it without installing anything, and steps aside when [MTPlugins](https://github.com/Aidan601/MTPlugins) runs; the bridge is then one of its plugins. For plugins in Radiant, use MTPlugins.
@@ -58,8 +58,8 @@ flowchart TB
 
 A release's `T7RadiantBridge-<version>.zip` holds both builds of the same plugin (`plugin/src/`):
 
-- `T7RadiantBridge-<version>.dll`, the standalone bridge: inject it into a running Radiant, with `LoadLibraryW` from a remote thread once Radiant's main window exists. Nothing is written into the BO3 install. Its name carries its version, as a running Radiant keeps the one it loaded locked.
-- `mtplugins/T7RadiantBridge/`, the MTPlugins plugin: where [MTPlugins](https://github.com/Aidan601/MTPlugins) runs, copy it into `<BO3 root>/bin/plugins/` and start Radiant. MTPlugins loads a new plugin on its own unless its `autoload_new` setting (`bin/plugins/RadiantPlugins.ini`) is 0; then tick it in MTPlugins' plugin list.
+- `T7RadiantBridge-<version>.dll`, the standalone bridge: where MTPlugins doesn't run, inject it into a running Radiant, with `LoadLibraryW` from a remote thread once Radiant's main window exists. Nothing is written into the BO3 install. Its name carries its version, as a running Radiant keeps the one it loaded locked.
+- `mtplugins/T7RadiantBridge/`, the MTPlugins plugin: where [MTPlugins](https://github.com/Aidan601/MTPlugins) runs, copy that folder into `<BO3 root>/bin/plugins/` and start Radiant. MTPlugins loads a new plugin on its own unless its `autoload_new` setting (`bin/plugins/RadiantPlugins.ini`) is 0; then tick it in MTPlugins' plugin list.
 
 ## ⌨️ Use
 
