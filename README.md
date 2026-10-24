@@ -1,7 +1,7 @@
 <div align="center">
     <img src="docs/media/logo.svg" alt="T7 Radiant Bridge logo" width="160" height="160"/>
     <h1>T7 Radiant Bridge</h1>
-    <h3><em>Black Ops 3's Radiant, driven from another program, over a named pipe.</em></h3>
+    <h3><em>A Radiant plugin that lets other programs read, edit and see the open map.</em></h3>
 </div>
 
 <p align="center">
@@ -22,6 +22,9 @@
 </p>
 
 A plugin for Radiant, Black Ops III's map editor, that lets another program drive it the way a mapper does: read the open map, edit it with undo, run Radiant's own commands, move the camera and capture the views. It serves a named-pipe protocol, [PROTOCOL.md](PROTOCOL.md), so any program on the same machine can be its client: an AI agent's tools, a script, a test. [T7 Companion](https://github.com/McReaper/t7_companion) is one, and ships the bridge to its users.
+
+> [!NOTE]
+> T7 Radiant Bridge is one plugin, not a plugin host: it loads no other plugin and has no UI. Its standalone host only carries the bridge, for a client to load it without installing anything, and steps aside when [MTPlugins](https://github.com/Aidan601/MTPlugins) runs; the bridge is then one of its plugins. For plugins in Radiant, use MTPlugins.
 
 ## ⚙️ How it works
 
