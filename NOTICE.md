@@ -10,6 +10,6 @@ The standalone host under [`host/`](host/) is forked from [MTPlugins](https://gi
 
 [`third_party/minhook/`](third_party/minhook/) is [MinHook](https://github.com/TsudaKageyu/minhook) v1.3.4 (commit `c3fcafdc10146beb5919319d0683e44e3c30d537`), Copyright (C) 2009-2017 Tsuda Kageyu and contributors, licensed under the 2-clause BSD License. Its full license and author list are in `third_party/minhook/LICENSE.txt` and `AUTHORS.txt`, kept as distributed; a release archive carries the license as `MinHook-LICENSE.txt`, beside the standalone DLL it is compiled into.
 
-## t7kb
+## Clients
 
-[t7kb](https://github.com/McReaper/t7_companion), which drives this plugin, is a separate MIT-licensed program. It talks to the bridge over a named pipe only (see [`PROTOCOL.md`](PROTOCOL.md)); it does not link the bridge's code.
+A client talks to the bridge over a named pipe only (see [`PROTOCOL.md`](PROTOCOL.md)) and does not link the bridge's code: it is a separate program, under its own license.

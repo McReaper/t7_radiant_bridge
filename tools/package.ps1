@@ -1,6 +1,6 @@
-# Packs a built tree into T7RadiantBridge-<version>.zip, the layout t7kb's release packaging unpacks:
-#   T7RadiantBridge-<version>.dll         the standalone bridge t7kb injects, named by its version (a running Radiant
-#                                         locks the one it loaded, so an update goes in beside it)
+# Packs a built tree into T7RadiantBridge-<version>.zip, the release's layout, which clients that ship the bridge unpack:
+#   T7RadiantBridge-<version>.dll         the standalone bridge a client injects, named by its version (a running
+#                                         Radiant locks the one it loaded, so an update goes in beside it)
 #   mtplugins/T7RadiantBridge/            the MTPlugins plugin, for a Radiant MTPlugins loads into
 #   LICENSE, NOTICE.md, MinHook-LICENSE.txt   the GPL and MinHook's BSD terms travel with the binaries
 # Entry names are written with '/' (Compress-Archive in Windows PowerShell writes '\', which unzip mangles).
