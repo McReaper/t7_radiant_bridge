@@ -63,7 +63,7 @@ A release's `T7RadiantBridge-<version>.zip` holds both builds of the same plugin
 
 ## ⌨️ Use
 
-Speak [PROTOCOL.md](PROTOCOL.md) on the pipe: length-prefixed frames, a header line, then a body. `tools/t7rb`, a client in Go, is small enough to read as an example, and drives a running Radiant by hand:
+Speak [PROTOCOL.md](PROTOCOL.md) on the pipe: length-prefixed frames, a header line, then a body. The plugin is C++ because it runs inside Radiant; a client runs outside it, in any language. `tools/t7rb` is one in Go, a single exe with nothing to install, small enough to read as an example, and it drives a running Radiant by hand:
 
 ```sh
 t7rb state                                  # the open map, its entity count, the selection, any dialog
@@ -74,7 +74,7 @@ t7rb listen console map                     # the console and the map's events, 
 
 ## 🛠️ Build
 
-`build.bat` builds both DLLs into `build/Release/` with Visual Studio's C++ tools and CMake, and runs the tests: the protocol's text, and the host's logic that needs no Radiant (menu paths, view projection, the exe check). CI does the same on every pull request and keeps the packed archive.
+`build.bat` builds both DLLs into `build/Release/` with Visual Studio's C++ tools and CMake, for x64 with MSVC as Radiant is built, and runs the tests: the protocol's text, and the host's logic that needs no Radiant (menu paths, view projection, the exe check). `t7rb` builds with `go build` in `tools/t7rb` (Go 1.25). CI does both on every pull request and keeps the packed archive.
 
 ## 🚀 Releases
 
