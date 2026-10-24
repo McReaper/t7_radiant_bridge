@@ -1,5 +1,5 @@
 // Command t7rb is the bridge's development client: one request to a running Radiant's T7RadiantBridge plugin, its
-// events, or a hot swap of the plugin's DLL. t7kb is the real client; this one exercises PROTOCOL.md by hand.
+// events, or a hot swap of the plugin's DLL: PROTOCOL.md spoken by hand, as any client speaks it.
 //
 //	t7rb [-pid N] [-body file|-] [-png file] <command> [args…]   one request after hello; prints the reply
 //	t7rb [-pid N] listen <event>…                                 prints the events until interrupted

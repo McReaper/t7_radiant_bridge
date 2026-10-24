@@ -1,6 +1,6 @@
 // The standalone host: T7RadiantBridge with its own minimal plugin host, so it
-// runs in a Radiant that MTPlugins doesn't load into. t7kb injects it
-// (LoadLibraryW) when it opens a map; nothing is written into the BO3 install.
+// runs in a Radiant that MTPlugins doesn't load into. A client injects it
+// (LoadLibraryW from a remote thread); nothing is written into the BO3 install.
 //
 // The DLL starts off the loader lock, steps aside when MTPlugins is present,
 // checks the Radiant build, then installs its hooks; the bridge loads on
@@ -76,7 +76,7 @@ namespace
         for (int i = 0; i < 40; ++i)
         {
             if (!host::coexist::MTPluginsPresent()) break;
-            if (i == 0) HLOG("host: MTPlugins is hosting plugins here; t7kb goes through it, so this host stays passive");
+            if (i == 0) HLOG("host: MTPlugins is hosting plugins here, so this host stays passive: load the MTPlugins plugin build instead");
             Sleep(250);
             if (i == 39)
             {

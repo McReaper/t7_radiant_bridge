@@ -22,8 +22,8 @@ static void TestParseRequest()
 {
     Header h;
     std::string body, why;
-    CHECK(ParseRequest("12 import t7kb: room A\n{\n}\n", h, body, why));
-    CHECK(h.id == 12 && h.command == "import" && h.args == "t7kb: room A" && body == "{\n}\n");
+    CHECK(ParseRequest("12 import my tool: room A\n{\n}\n", h, body, why));
+    CHECK(h.id == 12 && h.command == "import" && h.args == "my tool: room A" && body == "{\n}\n");
 
     CHECK(ParseRequest("3 state\r\n", h, body, why));
     CHECK(h.id == 3 && h.command == "state" && h.args.empty() && body.empty());
