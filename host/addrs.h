@@ -25,7 +25,11 @@ namespace host::rt
     constexpr uintptr_t Map_EnterPrefab = 0x140CDF5A0;
     constexpr uintptr_t Map_LeavePrefab = 0x140CD5E30;
     constexpr uintptr_t RoutineProcessing = 0x14064BFB0;   // RadiantMainWin::RoutineProcessing(this)
-    constexpr uintptr_t QuestionBox = 0x140D337C0;
+    constexpr uintptr_t QuestionBox = 0x140D337C0;         // (parent, text, title, buttons, default): 0x4000 Yes, 0x10000 No
+    constexpr uintptr_t str_LightingChanged = 0x14264DA20; // .rdata: the "Lighting changed" question every load asks
+    constexpr uintptr_t Bookmarks_Save = 0x140D46D40;      // char (bookmarks, const char* mapName), what Radiant does before a load
+    constexpr uintptr_t Bookmarks_Count = 0x140D47010;     // int (bookmarks)
+    constexpr uintptr_t g_bookmarks = 0x14521F200;         // camera bookmark table
 
     // --- map state globals ---
     constexpr uintptr_t g_currentMapName = 0x14521ED20;   // char[] path, "unnamed.map" when none
@@ -58,4 +62,41 @@ namespace host::rt
     constexpr size_t off_Brush_Maxs = 76;                 // float[3]
     constexpr size_t off_BInst_Next = 8;                  // links in the collection list
     constexpr size_t off_BInst_Brush = 48;                // brush_t*
+
+    // --- EntityInst world list (a brush_t -> its BrushInst, what Select_Brush wants) ---
+    constexpr uintptr_t g_world = 0x14522B130;            // world object; the EntityInst list is reached through it
+    constexpr uintptr_t EntityInst_Begin = 0x1400186F6;   // thunk: (world, EntityInst** out) writes the first inst
+    constexpr uintptr_t EntityInst_End = 0x14004E1C0;     // thunk: (world, EntityInst** out) returns EntityInst** end
+    constexpr size_t off_EInst_ListSentinel = 16;         // pseudo BrushInst; its instance-list prev/next at +24/+32
+    constexpr size_t off_EInst_Next = 768;                // next EntityInst in the world list
+    constexpr size_t off_BInst_ListPrev = 24;             // links in the owning EntityInst's instance list
+    constexpr size_t off_BInst_ListNext = 32;
+
+    // --- paste / delete / undo pipeline ---
+    constexpr uintptr_t Map_ImportBuffer = 0x140CD3E60;   // (char** text, uint flags, uchar regenerateGuids)
+    constexpr uintptr_t BeginParseSession = 0x1406F6A80;  // (const char* name)
+    constexpr uintptr_t EndParseSession = 0x140D3C9F0;    // ()
+    constexpr uintptr_t Undo_Begin = 0x140C164D0;         // (const char* label), the label kept by pointer
+    constexpr uintptr_t Undo_End = 0x140C16520;           // ()
+    constexpr uintptr_t Undo_IsOpen = 0x140C16ED0;        // () -> bool: the top undo operation is still open
+    constexpr uintptr_t Undo_AddBrushList = 0x140B00FA0;  // (BrushCollection*) records the selection for undo
+    constexpr uintptr_t Selection_BeginBatch = 0x140B01060; // (BrushCollection*) ++batch depth
+    constexpr uintptr_t Selection_EndBatch = 0x140B01070; // (BrushCollection*, int 3, __int64 0, char 1) fires the change event
+    constexpr uintptr_t Selection_CloseUndo = 0x140B00FF0; // (BrushCollection*) after Undo_AddBrushList
+    constexpr uintptr_t Select_Brush = 0x140B01DB0;       // (BrushCollection*, BrushInst*) — NOT a brush_t* (reads the inst GUID at +56)
+    constexpr uintptr_t Select_Deselect = 0x140D023E0;    // (char clearDrag)
+    constexpr uintptr_t Select_Delete = 0x140D02320;      // () deletes everything in the selected collection
+    constexpr uintptr_t g_importKeepLinks = 0x14521EB91;  // char: 1 keeps target/linkto through the paste remap
+
+    // --- entity GUID registry (a GUID rewrite must move the instance through it) ---
+    constexpr uintptr_t g_entityRegistry = 0x14522B6D0;   // std::multimap<GUID, EntityInst*> head; node +25 isnil, +48 EntityInst*
+    constexpr uintptr_t EntityRegistry_Add = 0x140CD81B0; // (EntityInst*)
+    constexpr uintptr_t EntityRegistry_Remove = 0x140CD82F0; // (EntityInst*)
+    constexpr size_t off_Entity_EClass = 240;             // eclass*; eclass[72] != 0 = fixed-size (point / model / prefab)
+    constexpr size_t off_Entity_ListPrev = 440;           // global entity list prev (an import's newest entity is list->prev)
+
+    // --- view redraw flags (consumed on the idle tick) ---
+    constexpr uintptr_t g_redrawFlags = 0x1444C656C;      // int bitmask
+    constexpr unsigned kRedraw3D = 0x1;
+    constexpr unsigned kRedraw2D = 0x2;
 }

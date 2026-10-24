@@ -1,8 +1,9 @@
 // Modified from MTPlugins (https://github.com/Aidan601/MTPlugins, src/hostapi.cpp at 89423aa) on 2026-10-23.
 // Copyright (C) 2026 Figglebottom and contributors, GNU GPL v3 like the rest of this repository.
 //
-// The host-API table, filled with the entries hello and state use (M2a). Entries not yet implemented are null; the
-// bridge null-checks them, and host->size spans the whole struct so rp::Has reports them present.
+// The host-API table, filled with the entries the bridge's reads (hello, state, entities, selection), edits (import,
+// delete, edit, replace, setkey, select) and reload use. The Qt menu and capture entries answer "nothing there" until
+// they are served; entries no bridge command calls stay null (host->size spans the whole struct).
 #include "hostapi.h"
 #include "addrs.h"
 #include "editor.h"
@@ -14,6 +15,7 @@
 #include <objbase.h>   // StringFromGUID2
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace host::hostapi
 {
@@ -177,6 +179,89 @@ namespace host::hostapi
         int H_Detour(ModToolsPlugin*, void* target, void* detour, void** original) { return host::hooks::Detour(target, detour, original) ? 1 : 0; }
         int H_App(ModToolsPlugin*) { return MODTOOLS_APP_RADIANT; }
 
+        // ---- edits ----
+        int H_ImportMapText(ModToolsPlugin*, const char* text, const char* label)
+        {
+            return text && host::editor::ImportMapText(text, label ? label : "plugin") ? 1 : 0;
+        }
+        int H_DeleteBrushes(ModToolsPlugin*, const ModToolsBrush* brushes, size_t n, const char* label)
+        {
+            return host::editor::DeleteBrushes(std::vector<void*>(brushes, brushes + n), label ? label : "plugin") ? 1 : 0;
+        }
+        void H_SelectBrushInsts(ModToolsPlugin*, const ModToolsBrushInst* insts, size_t n)
+        {
+            host::editor::SelectBrushInsts(std::vector<void*>(insts, insts + n));
+        }
+        void H_DeselectAll(ModToolsPlugin*) { host::editor::DeselectAll(); }
+        void H_BeginUndo(ModToolsPlugin*, const char* label) { host::editor::BeginUndo(label); }
+        void H_EndUndo(ModToolsPlugin*) { host::editor::EndUndo(); }
+        ModToolsBrushInst H_BrushInstOf(ModToolsPlugin*, ModToolsBrush b) { return host::editor::FindBrushInst(b); }
+        int H_EntityFixedSize(ModToolsPlugin*, ModToolsEntity e) { return host::editor::EntityFixedSize(e) ? 1 : 0; }
+        void H_RequestRedraw(ModToolsPlugin*, unsigned views)
+        {
+            unsigned bits = 0;
+            if (views & MODTOOLS_VIEW_3D) bits |= rt::kRedraw3D;
+            if (views & MODTOOLS_VIEW_2D) bits |= rt::kRedraw2D;
+            host::editor::RequestRedraw(bits);
+        }
+        size_t H_FindBrushesByGuid(ModToolsPlugin*, const char* const* guids, size_t n, ModToolsBrush* out)
+        {
+            if (!guids || !out) return 0;
+            std::vector<std::string> keys(n);
+            for (size_t i = 0; i < n; ++i) keys[i] = guids[i] ? guids[i] : "";
+            std::vector<void*> found;
+            size_t count = host::editor::FindBrushesByGuid(keys, found);
+            for (size_t i = 0; i < n; ++i) out[i] = i < found.size() ? found[i] : nullptr;
+            return count;
+        }
+        int H_RestampImportedGuids(ModToolsPlugin*, const char* entityGuid, const char* const* brushGuids, size_t n)
+        {
+            std::vector<std::string> v(n);
+            for (size_t i = 0; i < n; ++i) v[i] = brushGuids[i] ? brushGuids[i] : "";
+            return host::editor::RestampImportedGuids(entityGuid ? entityGuid : "", v) ? 1 : 0;
+        }
+        size_t H_RestampImportedEntities(ModToolsPlugin*, const char* const* entityGuids, size_t n, const char* const* brushGuids, const size_t* brushCounts)
+        {
+            if (!entityGuids || !brushCounts) return 0;
+            std::vector<std::string> ents(n);
+            std::vector<std::vector<std::string>> brushes(n);
+            size_t k = 0;
+            for (size_t i = 0; i < n; ++i)
+            {
+                ents[i] = entityGuids[i] ? entityGuids[i] : "";
+                if (brushCounts[i] && !brushGuids) return 0;
+                for (size_t j = 0; j < brushCounts[i]; ++j, ++k) brushes[i].push_back(brushGuids[k] ? brushGuids[k] : "");
+            }
+            return host::editor::RestampImportedEntities(ents, brushes);
+        }
+        // ---- reload ----
+        int H_ReloadMap(ModToolsPlugin*, const wchar_t* path, int keepCamera) { return path && host::hooks::ReloadMap(path, keepCamera != 0) ? 1 : 0; }
+        int H_IsReloading(ModToolsPlugin*) { return host::hooks::IsReloading() ? 1 : 0; }
+
+        // ---- not yet served: the Qt menus and the view capture (M2d) ----
+        // The bridge calls these without a null check, and a call through a null entry would fault and disable it for
+        // the session: each answers "nothing there" instead, which the bridge reports as an error. The edit rollback
+        // (TriggerMenuAction "Edit/Undo") runs on a path that already failed: 0 leaves that operation as one undo
+        // step the user can reverse with Ctrl+Z.
+        int H_TriggerMenuAction(ModToolsPlugin*, const char* path)
+        {
+            HLOG("host: TriggerMenuAction('%s') before the Qt menu bridge: ignored", path ? path : "");
+            return 0;
+        }
+        size_t H_MenuEntries(ModToolsPlugin*, const char*, char* out, size_t cap)
+        {
+            if (out && cap) out[0] = 0;
+            return 0;
+        }
+        void* H_CamWindow(ModToolsPlugin*) { return nullptr; }
+        void* H_XYWindow(ModToolsPlugin*, int) { return nullptr; }
+        int H_Project(ModToolsPlugin*, const float*, float* sx, float* sy)
+        {
+            if (sx) *sx = 0;
+            if (sy) *sy = 0;
+            return 0;
+        }
+
         ModToolsHostApi Build()
         {
             wchar_t p[MAX_PATH * 2] = {};
@@ -225,6 +310,27 @@ namespace host::hostapi
             t.RadiantAddress = H_RadiantAddress;
             t.Detour = H_Detour;
             t.App = H_App;
+            // edits (the bridge's import/delete/edit/replace/setkey/select commands)
+            t.ImportMapText = H_ImportMapText;
+            t.DeleteBrushes = H_DeleteBrushes;
+            t.SelectBrushInsts = H_SelectBrushInsts;
+            t.DeselectAll = H_DeselectAll;
+            t.RestampImportedGuids = H_RestampImportedGuids;
+            t.BrushInstOf = H_BrushInstOf;
+            t.TriggerMenuAction = H_TriggerMenuAction;
+            t.BeginUndo = H_BeginUndo;
+            t.EndUndo = H_EndUndo;
+            t.RequestRedraw = H_RequestRedraw;
+            t.FindBrushesByGuid = H_FindBrushesByGuid;
+            t.EntityFixedSize = H_EntityFixedSize;
+            t.RestampImportedEntities = H_RestampImportedEntities;
+            t.ReloadMap = H_ReloadMap;
+            t.IsReloading = H_IsReloading;
+            // M2d stubs
+            t.MenuEntries = H_MenuEntries;
+            t.CamWindow = H_CamWindow;
+            t.XYWindow = H_XYWindow;
+            t.Project = H_Project;
             return t;
         }
     }
