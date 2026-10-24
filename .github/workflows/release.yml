@@ -38,6 +38,6 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           cat > notes.md <<'EOF'
-          **Install:** [t7kb](https://github.com/McReaper/t7_companion) ships this release and loads it into Radiant when it opens a map: nothing to install by hand. What an agent does with it: [Radiant integration](https://github.com/McReaper/t7_companion/blob/main/docs/radiant.md).
+          **Load it:** inject `T7RadiantBridge-<version>.dll` into a running Radiant, or, where MTPlugins runs, copy `mtplugins/T7RadiantBridge/` into `<BO3 root>/bin/plugins/`; then speak [PROTOCOL.md](https://github.com/McReaper/t7_radiant_bridge/blob/main/PROTOCOL.md) on its pipe. The [README](https://github.com/McReaper/t7_radiant_bridge#-install) has the details.
           EOF
           gh release create "$GITHUB_REF_NAME" "T7RadiantBridge-$VERSION.zip" --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes

@@ -1,6 +1,6 @@
 # Bridge protocol (version 1)
 
-How a client — t7kb — talks to the T7RadiantBridge plugin inside a running Radiant. The plugin carries bytes and calls Radiant; it has no logic of its own. Filtering, shaping answers for an agent, building map text from an intent and checking an edit's target belong to the client.
+How a client, any program on the same machine, talks to the T7RadiantBridge plugin inside a running Radiant. The plugin carries bytes and calls Radiant; it has no logic of its own. Filtering, shaping answers for an agent, building map text from an intent and checking an edit's target belong to the client.
 
 ## Transport
 
