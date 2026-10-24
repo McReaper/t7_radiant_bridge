@@ -252,10 +252,10 @@ extern "C" MODTOOLS_PLUGIN_EXPORT const ModToolsPluginApi* ModToolsPluginEntry(M
     api.size = sizeof api;
     api.apiVersion = MODTOOLS_PLUGIN_API_VERSION;
     api.name = "T7RadiantBridge";
-    api.displayName = "t7kb Radiant bridge";
+    api.displayName = "T7 Radiant Bridge";
     api.version = bridge::kPluginVersion;
     api.author = "McReaper";
-    api.description = "Lets t7kb, and the AI agent behind it, read and edit the open map, run Radiant's commands, move the camera and see the views, over a named pipe.";
+    api.description = "Lets another program read and edit the open map, run Radiant's commands, move the camera and see the views, over a named pipe.";
     api.OnLoad = bridge::OnLoad;
     api.OnUnload = bridge::OnUnload;
     api.OnTick = bridge::OnTick;

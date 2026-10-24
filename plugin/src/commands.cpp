@@ -222,7 +222,7 @@ namespace bridge
             if (c.body.empty()) return Err("bad-request", "import needs entity text in its body, worldspawn block first");
             std::string bad;
             if (!CheckMapText(c.body, bad)) return Err("bad-request", bad);
-            std::string label = Label(c.h.args, 0, "t7kb import");
+            std::string label = Label(c.h.args, 0, "bridge import");
             std::vector<Picked> saved = SaveSelection();
             rp::host->DeselectAll(rp::self);
             if (!rp::host->ImportMapText(rp::self, c.body.c_str(), label.c_str()))
@@ -273,7 +273,7 @@ namespace bridge
                 if (!no.empty()) return Err("refused", no);
             }
             targets.insert(targets.end(), replaced.begin(), replaced.end());
-            std::string label = Label(c.h.args, 0, "t7kb edit");
+            std::string label = Label(c.h.args, 0, "bridge edit");
             std::vector<Picked> saved = SaveSelection();
             std::vector<std::string> missing;
             std::vector<ModToolsBrush> brushes = Resolve(targets, missing);    // deselects everything
@@ -328,7 +328,7 @@ namespace bridge
             std::string world = WorldGuid();
             for (const std::string& g : guids)
                 if (g == world) return Err("refused", "worldspawn cannot be deleted");
-            std::string label = Label(c.h.args, 0, "t7kb delete");
+            std::string label = Label(c.h.args, 0, "bridge delete");
             std::vector<Picked> saved = SaveSelection();
             std::vector<std::string> missing;
             std::vector<ModToolsBrush> brushes = Resolve(guids, missing);
@@ -347,7 +347,7 @@ namespace bridge
             std::string bad;
             if (!CheckMapText(c.body, bad)) return Err("bad-request", bad);
             const std::string guid = c.w[0];
-            std::string label = Label(c.h.args, 1, "t7kb replace");
+            std::string label = Label(c.h.args, 1, "bridge replace");
             ModToolsEntity e = rp::FindEntitiesByGuid({ guid })[0];
             if (!e) return Err("not-found", guid);
             if (e == rp::host->WorldEntity(rp::self)) return Err("refused", "worldspawn cannot be replaced: use setkey");

@@ -1,6 +1,6 @@
 // Whether MTPlugins already hosts plugins in this Radiant. Two hosts would hook
 // the same functions, so the standalone host stays passive when it does, and
-// t7kb goes through MTPlugins instead (its load.go applies the same rule).
+// a client loads the MTPlugins plugin build instead.
 #pragma once
 
 namespace host::coexist
