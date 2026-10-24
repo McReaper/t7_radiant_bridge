@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <objbase.h>
 #include <shlwapi.h>
+#include <mutex>
 #include <set>
 
 #pragma comment(lib, "shlwapi.lib")
@@ -55,6 +56,47 @@ namespace host::editor
             if (!mainWin) return nullptr;
             BYTE* qe = *reinterpret_cast<BYTE**>(mainWin + rt::off_MainWin_QEChildren);
             return qe ? *reinterpret_cast<BYTE**>(qe + rt::off_QEChildren_CamWnd) : nullptr;
+        }
+
+        // ---- the edit pipeline: Radiant function shapes and helpers ----
+        using Map_ImportBuffer_t = __int64(__fastcall*)(char** text, unsigned flags, unsigned char regenGuids);
+        using ParseSession_t     = void(__fastcall*)(const char* name);
+        using Void_t             = void(__fastcall*)();
+        using IsOpen_t           = bool(__fastcall*)();
+        using UndoBegin_t        = __int64(__fastcall*)(const char* label);
+        using Collection1_t      = __int64(__fastcall*)(void* collection);
+        using Collection2_t      = __int64(__fastcall*)(void* collection, void* brushInst);
+        using EndBatch_t         = __int64(__fastcall*)(void* collection, int, __int64, char);
+        using Deselect_t         = __int64(__fastcall*)(char clearDrag);
+        using InstFn_t           = void(__fastcall*)(void* entityInst);
+        using ListFn_t           = BYTE** (__fastcall*)(void* world, BYTE** out);
+        constexpr unsigned kImportFlags = 4;   // Radiant's paste value: the mesh/curve syntax in Brush_Parse (0 is fatal)
+
+        // GUID text ("{...}" or bare) -> GUID. Radiant writes upper-case braced; the client sends it back as written.
+        bool ParseGuidText(const std::string& text, GUID& out)
+        {
+            wchar_t w[64] = {};
+            if (text.size() < 36 || text.size() > 40) return false;
+            for (size_t i = 0; i < text.size(); ++i) w[i] = wchar_t(text[i]);
+            if (text[0] != '{') { std::wstring b = L"{" + std::wstring(w) + L"}"; return CLSIDFromString(b.c_str(), &out) == S_OK; }
+            return CLSIDFromString(w, &out) == S_OK;
+        }
+        bool GuidFromText(const std::string& text, BYTE* out16)
+        {
+            GUID g;
+            if (!ParseGuidText(text, g)) return false;
+            memcpy(out16, &g, 16);
+            return true;
+        }
+
+        // Radiant keeps the label POINTER of every undo operation: labels live in storage that is never freed
+        // (a caller's string would dangle after the next map load).
+        const char* InternLabel(const char* label)
+        {
+            static std::mutex m;
+            static std::set<std::string> labels;
+            std::lock_guard<std::mutex> lock(m);
+            return labels.insert(label && *label ? label : "plugin").first->c_str();
         }
     }
 
@@ -228,5 +270,231 @@ namespace host::editor
         memcpy(cam + rt::off_CamWnd_Origin, origin, 3 * sizeof(float));
         memcpy(cam + rt::off_CamWnd_Angles, angles, 3 * sizeof(float));
         return true;
+    }
+
+    void DeselectAll()
+    {
+        if (!rt::VerifyBinary()) return;
+        Func<Deselect_t>(rt::Select_Deselect)(1);
+    }
+
+    void SelectBrushInsts(const std::vector<void*>& insts)
+    {
+        if (!rt::VerifyBinary()) return;
+        void* sel = Global<void>(rt::g_selectedBrushes);
+        Func<Collection1_t>(rt::Selection_BeginBatch)(sel);
+        for (void* b : insts) Func<Collection2_t>(rt::Select_Brush)(sel, b);
+        Func<EndBatch_t>(rt::Selection_EndBatch)(sel, 3, 0, 1);
+    }
+
+    void BeginUndo(const char* label)
+    {
+        if (!rt::VerifyBinary() || Func<IsOpen_t>(rt::Undo_IsOpen)()) return;   // join an open operation rather than nest
+        Func<UndoBegin_t>(rt::Undo_Begin)(InternLabel(label));
+        Func<Collection1_t>(rt::Undo_AddBrushList)(Global<void>(rt::g_selectedBrushes));
+    }
+
+    void EndUndo()
+    {
+        if (!rt::VerifyBinary() || !Func<IsOpen_t>(rt::Undo_IsOpen)()) return;
+        void* sel = Global<void>(rt::g_selectedBrushes);
+        Func<Collection1_t>(rt::Selection_CloseUndo)(sel);
+        Func<Void_t>(rt::Undo_End)();
+    }
+
+    bool ImportMapText(const std::string& text, const char* label)
+    {
+        if (!rt::VerifyBinary()) return false;
+        bool undoOpen = Func<IsOpen_t>(rt::Undo_IsOpen)();   // join an edit's open bracket, else make our own
+        std::string buf = text;                              // the importer advances the pointer, so give it a writable copy
+        char* p = &buf[0];
+        void* sel = Global<void>(rt::g_selectedBrushes);
+        Func<ParseSession_t>(rt::BeginParseSession)("t7_radiant_bridge");
+        if (!undoOpen) { Func<UndoBegin_t>(rt::Undo_Begin)(InternLabel(label)); Func<Collection1_t>(rt::Undo_AddBrushList)(sel); }
+        Func<Collection1_t>(rt::Selection_BeginBatch)(sel);
+        char* keepLinks = Global<char>(rt::g_importKeepLinks);   // keep target/linkto (Radiant's paste remap drops them)
+        char keepLinksWas = *keepLinks;
+        *keepLinks = 1;
+        Func<Map_ImportBuffer_t>(rt::Map_ImportBuffer)(&p, kImportFlags, 0);
+        *keepLinks = keepLinksWas;
+        Func<EndBatch_t>(rt::Selection_EndBatch)(sel, 3, 0, 1);
+        if (!undoOpen) { Func<Collection1_t>(rt::Selection_CloseUndo)(sel); Func<Void_t>(rt::Undo_End)(); }
+        Func<Void_t>(rt::EndParseSession)();
+        return true;
+    }
+
+    void* FindBrushInst(void* brush)
+    {
+        if (!brush || !rt::VerifyBinary()) return nullptr;
+        BYTE* owner = *reinterpret_cast<BYTE**>(reinterpret_cast<BYTE*>(brush) + rt::off_Brush_Owner);
+        void* world = Global<void>(rt::g_world);
+        BYTE* first = nullptr; BYTE* endTmp = nullptr;
+        Func<ListFn_t>(rt::EntityInst_Begin)(world, &first);
+        BYTE** endPtr = Func<ListFn_t>(rt::EntityInst_End)(world, &endTmp);
+        BYTE* end = endPtr ? *endPtr : nullptr;
+        size_t guard = 0;
+        for (BYTE* inst = first; inst && inst != end && guard++ < 200000; inst = *reinterpret_cast<BYTE**>(inst + rt::off_EInst_Next))
+        {
+            if (*reinterpret_cast<BYTE**>(inst + rt::off_EInst_Entity) != owner) continue;
+            BYTE* sentinel = inst + rt::off_EInst_ListSentinel;
+            size_t g2 = 0;
+            for (BYTE* n = *reinterpret_cast<BYTE**>(sentinel + rt::off_BInst_ListNext);
+                 n && n != sentinel && g2++ < 100000;
+                 n = *reinterpret_cast<BYTE**>(n + rt::off_BInst_ListNext))
+                if (*reinterpret_cast<BYTE**>(n + rt::off_BInst_Brush) == brush) return n;
+            return nullptr;
+        }
+        return nullptr;
+    }
+
+    bool DeleteBrushes(const std::vector<void*>& brushes, const char* label)
+    {
+        if (brushes.empty()) return true;
+        if (!rt::VerifyBinary()) return false;
+        std::vector<void*> insts;
+        for (void* b : brushes) if (void* bi = FindBrushInst(b)) insts.push_back(bi);
+        if (insts.empty()) return false;
+        bool undoOpen = Func<IsOpen_t>(rt::Undo_IsOpen)();
+        void* sel = Global<void>(rt::g_selectedBrushes);
+        DeselectAll();
+        SelectBrushInsts(insts);
+        if (!undoOpen) Func<UndoBegin_t>(rt::Undo_Begin)(InternLabel(label));
+        Func<Collection1_t>(rt::Undo_AddBrushList)(sel);   // the brushes about to go must be in the record, inside a bracket too
+        Func<Void_t>(rt::Select_Delete)();
+        if (!undoOpen) { Func<Collection1_t>(rt::Selection_CloseUndo)(sel); Func<Void_t>(rt::Undo_End)(); }
+        return true;
+    }
+
+    size_t FindBrushesByGuid(const std::vector<std::string>& guids, std::vector<void*>& out)
+    {
+        out.assign(guids.size(), nullptr);
+        if (guids.empty() || !rt::VerifyBinary()) return 0;
+        struct Key { GUID g; size_t index; };
+        std::vector<Key> keys;
+        for (size_t i = 0; i < guids.size(); ++i) { GUID g; if (ParseGuidText(guids[i], g)) keys.push_back({ g, i }); }
+        if (keys.empty()) return 0;
+        size_t found = 0, remaining = keys.size();
+        ForEachEntity([&](void* ent) {
+            if (!remaining) return;
+            ForEachEntityBrush(ent, [&](void* bv) {
+                if (!remaining) return;
+                const GUID* bg = reinterpret_cast<const GUID*>(reinterpret_cast<BYTE*>(bv) + rt::off_Brush_Guid);
+                for (Key& k : keys)
+                {
+                    if (k.index == size_t(-1) || memcmp(&k.g, bg, sizeof(GUID)) != 0) continue;
+                    out[k.index] = bv; k.index = size_t(-1); ++found; --remaining;
+                    break;
+                }
+            });
+        });
+        return found;
+    }
+
+    bool EntityFixedSize(void* ent)
+    {
+        if (!ent || !rt::VerifyBinary()) return false;
+        BYTE* eclass = *reinterpret_cast<BYTE**>(reinterpret_cast<BYTE*>(ent) + rt::off_Entity_EClass);
+        return eclass && eclass[72] != 0;
+    }
+
+    void RequestRedraw(unsigned views)
+    {
+        if (views && rt::VerifyBinary()) *Global<unsigned>(rt::g_redrawFlags) |= views;
+    }
+
+    namespace
+    {
+        // The selected brushes as brush_t*, from the selection instance list.
+        std::vector<void*> SelectedBrushes()
+        {
+            std::vector<void*> out;
+            for (void* bi : SelectedBrushInsts())
+                if (void* b = *reinterpret_cast<BYTE**>(reinterpret_cast<BYTE*>(bi) + rt::off_BInst_Brush)) out.push_back(b);
+            return out;
+        }
+
+        // The live EntityInsts of `ent` found in Radiant's GUID registry (values only compared, nodes walked as a tree).
+        std::vector<void*> RegisteredInstsOf(void* ent)
+        {
+            std::vector<void*> out;
+            BYTE* head = *Global<BYTE*>(rt::g_entityRegistry);
+            if (!head || !ent) return out;
+            std::vector<BYTE*> live;
+            void* world = Global<void>(rt::g_world);
+            BYTE* first = nullptr; BYTE* endTmp = nullptr;
+            Func<ListFn_t>(rt::EntityInst_Begin)(world, &first);
+            BYTE** endPtr = Func<ListFn_t>(rt::EntityInst_End)(world, &endTmp);
+            BYTE* end = endPtr ? *endPtr : nullptr;
+            size_t guard = 0;
+            for (BYTE* inst = first; inst && inst != end && guard++ < 200000; inst = *reinterpret_cast<BYTE**>(inst + rt::off_EInst_Next))
+                if (*reinterpret_cast<BYTE**>(inst + rt::off_EInst_Entity) == ent) live.push_back(inst);
+            if (live.empty()) return out;
+            std::vector<BYTE*> stack;
+            stack.push_back(*reinterpret_cast<BYTE**>(head + 8));   // root = head->parent (the head itself when empty)
+            guard = 0;
+            while (!stack.empty() && guard++ < 1000000)
+            {
+                BYTE* node = stack.back(); stack.pop_back();
+                if (!node || node[25]) continue;                    // isnil (the head sentinel)
+                BYTE* inst = *reinterpret_cast<BYTE**>(node + 48);
+                for (BYTE* l : live) if (l == inst) { out.push_back(inst); break; }
+                stack.push_back(*reinterpret_cast<BYTE**>(node + 0));
+                stack.push_back(*reinterpret_cast<BYTE**>(node + 16));
+            }
+            return out;
+        }
+
+        // Writing a GUID over a registered entity would strand its registry entry (Radiant's own duplicate fixer takes
+        // the instances out, changes the GUID, puts them back): do the same. Brushes: the entity's selected ones (the
+        // import selected them), else all of its brushes.
+        void RestampEntity(void* ent, const std::vector<void*>& sel, const std::string& entityGuid, const std::string* brushGuids, size_t nGuids)
+        {
+            std::vector<void*> registered = RegisteredInstsOf(ent);
+            for (void* inst : registered) Func<InstFn_t>(rt::EntityRegistry_Remove)(inst);
+            GuidFromText(entityGuid, reinterpret_cast<BYTE*>(ent) + rt::off_Entity_Guid);
+            for (void* inst : registered) Func<InstFn_t>(rt::EntityRegistry_Add)(inst);
+            std::vector<void*> brushes;
+            for (void* b : sel) if (BrushOwner(b) == ent) brushes.push_back(b);
+            if (brushes.empty()) ForEachEntityBrush(ent, [&](void* b) { brushes.push_back(b); });
+            size_t n = brushes.size() < nGuids ? brushes.size() : nGuids;
+            for (size_t i = 0; i < n; ++i) GuidFromText(brushGuids[i], reinterpret_cast<BYTE*>(brushes[i]) + rt::off_Brush_Guid);
+        }
+    }
+
+    bool RestampImportedGuids(const std::string& entityGuid, const std::vector<std::string>& brushGuids)
+    {
+        if (!rt::VerifyBinary()) return false;
+        std::vector<void*> sel = SelectedBrushes();
+        if (entityGuid.empty())
+        {
+            if (sel.size() != brushGuids.size()) return false;
+            for (size_t i = 0; i < sel.size(); ++i) GuidFromText(brushGuids[i], reinterpret_cast<BYTE*>(sel[i]) + rt::off_Brush_Guid);
+            return true;
+        }
+        BYTE* list = Global<BYTE>(rt::g_entityList);
+        BYTE* ent = *reinterpret_cast<BYTE**>(list + rt::off_Entity_ListPrev);   // the import's newest entity
+        if (!ent || ent == list) return false;
+        RestampEntity(ent, sel, entityGuid, brushGuids.data(), brushGuids.size());
+        return true;
+    }
+
+    size_t RestampImportedEntities(const std::vector<std::string>& entityGuids, const std::vector<std::vector<std::string>>& brushGuids)
+    {
+        if (!rt::VerifyBinary()) return 0;
+        size_t n = entityGuids.size();
+        if (n == 0 || brushGuids.size() != n) return 0;
+        // one import appends its entities to the global list in text order: the last n entries, oldest first
+        BYTE* list = Global<BYTE>(rt::g_entityList);
+        std::vector<void*> ents(n, nullptr);
+        BYTE* e = list;
+        for (size_t i = n; i-- > 0;)
+        {
+            e = *reinterpret_cast<BYTE**>(e + rt::off_Entity_ListPrev);
+            if (!e || e == list) return 0;
+            ents[i] = e;
+        }
+        std::vector<void*> sel = SelectedBrushes();
+        for (size_t i = 0; i < n; ++i) RestampEntity(ents[i], sel, entityGuids[i], brushGuids[i].data(), brushGuids[i].size());
+        return n;
     }
 }
