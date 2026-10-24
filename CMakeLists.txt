@@ -30,7 +30,7 @@ target_compile_options(T7RadiantBridge PRIVATE ${BRIDGE_WARNINGS} /EHsc /externa
 # ---- the standalone host: T7RadiantBridge with its own minimal plugin host, so
 # it runs in a Radiant that MTPlugins doesn't load into. Built from host/, forked
 # from MTPlugins (GPLv3); the T7RadiantBridge target above is the MTPlugins plugin
-# and is unchanged. (Milestone 1: loads, verifies, logs; no hooks or plugin yet.)
+# and is unchanged.
 
 # MinHook (BSD-2, third_party/minhook), its own warning level.
 add_library(minhook STATIC
@@ -42,7 +42,7 @@ add_library(minhook STATIC
 target_include_directories(minhook PUBLIC third_party/minhook/include)
 
 # the host logic that needs no Radiant, so host_test can check it
-add_library(host_pure STATIC host/exe.cpp host/menukey.cpp)
+add_library(host_pure STATIC host/exe.cpp host/menukey.cpp host/project.cpp)
 target_include_directories(host_pure PUBLIC host)
 target_compile_options(host_pure PRIVATE ${BRIDGE_WARNINGS})
 
@@ -55,6 +55,7 @@ add_library(T7RadiantBridgeStandalone SHARED
   host/editor.cpp
   host/mainwindow.cpp
   host/qt.cpp
+  host/render.cpp
   host/seh.cpp
   host/plugin.cpp
   host/hostapi.cpp

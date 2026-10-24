@@ -1,16 +1,16 @@
 // Modified from MTPlugins (https://github.com/Aidan601/MTPlugins, src/hostapi.cpp at 89423aa) on 2026-10-23.
 // Copyright (C) 2026 Figglebottom and contributors, GNU GPL v3 like the rest of this repository.
 //
-// The host-API table, filled with the entries the bridge's reads (hello, state, entities, selection), edits (import,
-// delete, edit, replace, setkey, select), reload and menus (command, menus, save, action) use. The capture entries
-// answer "nothing there" until they are served; entries no bridge command calls stay null (host->size spans the whole
-// struct).
+// The host-API table, filled with the entries the bridge's commands use: reads (hello, state, entities, selection),
+// edits (import, delete, edit, replace, setkey, select), reload, menus (command, menus, save, action) and capture.
+// Entries no bridge command calls stay null (host->size spans the whole struct, so rp::Has reports them present).
 #include "hostapi.h"
 #include "addrs.h"
 #include "editor.h"
 #include "hooks.h"
 #include "mainwindow.h"
 #include "qt.h"
+#include "render.h"
 #include "log.h"
 #include "modtools_plugin.h"
 #include <windows.h>
@@ -259,16 +259,16 @@ namespace host::hostapi
         }
         ModToolsWidget W_FindEditorWidget(const char* name) { return host::qt::FindEditorWidget(name); }
 
-        // ---- not yet served: the view capture (M2d) ----
-        // The bridge calls these without a null check, and a call through a null entry would fault and disable it for
-        // the session: each answers "nothing there" instead, which the bridge reports as an error.
-        void* H_CamWindow(ModToolsPlugin*) { return nullptr; }
-        void* H_XYWindow(ModToolsPlugin*, int) { return nullptr; }
-        int H_Project(ModToolsPlugin*, const float*, float* sx, float* sy)
+        // ---- the views (capture) ----
+        void* H_CamWindow(ModToolsPlugin*) { return host::render::CamWindow(); }
+        void* H_XYWindow(ModToolsPlugin*, int type) { return host::render::XYWindow(type); }
+        int H_Project(ModToolsPlugin*, const float* w, float* sx, float* sy)
         {
-            if (sx) *sx = 0;
-            if (sy) *sy = 0;
-            return 0;
+            float x = 0, y = 0;
+            if (!w || !host::render::Project(w, x, y)) return 0;
+            if (sx) *sx = x;
+            if (sy) *sy = y;
+            return 1;
         }
 
         ModToolsHostApi Build()
@@ -345,7 +345,7 @@ namespace host::hostapi
                 ui.FindEditorWidget = W_FindEditorWidget;
                 t.ui = &ui;
             }
-            // M2d stubs
+            // the views (capture)
             t.CamWindow = H_CamWindow;
             t.XYWindow = H_XYWindow;
             t.Project = H_Project;

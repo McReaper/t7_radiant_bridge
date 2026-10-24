@@ -2,7 +2,8 @@
 // 2026 Figglebottom and contributors, GNU GPL v3 like the rest of this repository.
 //
 // The editor's menus and named widgets, through Radiant's Qt 5.3 DLLs: functions resolved by mangled export name, no Qt
-// headers. Trimmed to what the bridge's command, menus, save and action reach. Main thread only.
+// headers. Trimmed to what the bridge's command, menus, save and action reach, and the capture's visible-pane check.
+// Main thread only.
 #pragma once
 #include <string>
 
@@ -22,4 +23,6 @@ namespace host::qt
 
     // A QObject anywhere under the main window by its object name, or nullptr.
     void* FindEditorWidget(const char* objectName);
+    // QWidget::isVisible; true when Qt is unavailable (nothing is skipped then).
+    bool WidgetVisible(void* widget);
 }

@@ -3,6 +3,7 @@
 // thread only (the host's hooks run here).
 #pragma once
 #include <string>
+#include "modtools_plugin.h"
 
 namespace host::plugin
 {
@@ -15,4 +16,5 @@ namespace host::plugin
     void MapLoaded(const std::wstring& path);
     void MapSaved(const std::wstring& path, bool autosave, bool selectedOnly);
     void ScopeChanged(const std::wstring& path, int depth);
+    void Draw(const ModToolsDrawContext& ctx);   // a view is being presented
 }
