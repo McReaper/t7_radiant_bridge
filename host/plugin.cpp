@@ -32,6 +32,8 @@ namespace host::plugin
         struct ScopeCall { const wchar_t* path; int depth; };
         void CallScope(void* a) { auto* c = static_cast<ScopeCall*>(a); if (g_api && g_api->OnScopeChanged) g_api->OnScopeChanged(c->path, c->depth); }
 
+        void CallDraw(void* a) { if (g_api && g_api->OnDraw) g_api->OnDraw(static_cast<const ModToolsDrawContext*>(a)); }
+
         // Runs a callback under SEH; the first fault disables the plugin.
         void Guard(void (*fn)(void*), void* arg, const char* what)
         {
@@ -80,5 +82,10 @@ namespace host::plugin
         if (!Loaded()) return;
         ScopeCall c{ path.c_str(), depth };
         Guard(CallScope, &c, "OnScopeChanged");
+    }
+
+    void Draw(const ModToolsDrawContext& ctx)
+    {
+        if (Loaded()) Guard(CallDraw, const_cast<ModToolsDrawContext*>(&ctx), "OnDraw");
     }
 }

@@ -1,7 +1,9 @@
 // Tests the host logic that needs no Radiant: the exe identity read on a
-// buffer, and how a menu path picks its entries.
+// buffer, how a menu path picks its entries, and how a view projects a point.
 #include "exe.h"
 #include "menukey.h"
+#include "project.h"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -13,6 +15,8 @@ static void Check(bool ok, const char* what)
 {
     if (!ok) { printf("FAIL: %s\n", what); ++g_fail; }
 }
+
+static bool Near(float a, float b) { return fabsf(a - b) < 0.05f; }
 
 // A minimal x64 PE image header with the given timestamp and SizeOfImage.
 static std::vector<unsigned char> FakePe(uint32_t timestamp, uint32_t sizeOfImage, uint16_t machine = 0x8664, uint16_t magic = 0x20B)
@@ -68,6 +72,49 @@ int main()
     Check(FindMenuEntry(undoOnly, "Undo") == 0, "a word prefix matches when no key is equal");
     Check(FindMenuEntry({ { "Undone" } }, "Undo") == -1, "a prefix inside a word does not match");
     Check(FindMenuEntry({ { "", true } }, "") == -1, "a separator never matches");
+    Check(FindMenuEntry({ { "Undo Paste", true } }, "Undo") == -1, "a separator with a label does not match a prefix either");
+
+    // the editor camera at the origin looking down +x, a 1600x900 frame, FOV 100 (a 16:9 view's horizontal FOV)
+    CamParams cam{ { 0, 0, 0 }, { 0, 0, 0 }, 1600, 900, false, false, 100.0f };
+    float sx = 0, sy = 0;
+    float ahead[3] = { 100, 0, 0 };
+    Check(ProjectCam(cam, ahead, sx, sy) && Near(sx, 800) && Near(sy, 450), "a point straight ahead is the frame's centre");
+    // at the 16:9 frame's horizontal FOV edge: tan(50 deg) * 100 units to the side lands on the right border
+    float edge[3] = { 100, -100 * tanf(50.0f * 3.14159265f / 180.0f), 0 };
+    Check(ProjectCam(cam, edge, sx, sy) && Near(sx, 1600) && Near(sy, 450), "the FOV's edge to the right (-y) is the right border");
+    float leftUp[3] = { 100, 10, 10 };
+    Check(ProjectCam(cam, leftUp, sx, sy) && sx < 800 && sy < 450, "+y is left and +z is up");
+    float behind[3] = { -100, 0, 0 };
+    Check(!ProjectCam(cam, behind, sx, sy), "a point behind the camera does not project");
+    CamParams yawed = cam;
+    yawed.angles[1] = 90;
+    float north[3] = { 0, 100, 0 };
+    Check(ProjectCam(yawed, north, sx, sy) && Near(sx, 800) && Near(sy, 450), "yaw 90 looks down +y");
+    CamParams pitched = cam;
+    pitched.angles[0] = 45;
+    float upAhead[3] = { 100, 0, 100 };
+    Check(ProjectCam(pitched, upAhead, sx, sy) && Near(sx, 800) && Near(sy, 450), "positive pitch looks up");
+    // the game view letterboxes a 16:9 lens: in a 1600x1000 frame it is 1600x900, so the FOV edge is still the border
+    CamParams game{ { 0, 0, 0 }, { 0, 0, 0 }, 1600, 1000, true, false, 100.0f };
+    Check(ProjectCam(game, edge, sx, sy) && Near(sx, 1600), "the game view's 16:9 lens spans the frame's width");
+    // in a 2000x900 frame the lens is 1600x900, centred: the FOV edge is 800 pixels right of the centre
+    CamParams wide{ { 0, 0, 0 }, { 0, 0, 0 }, 2000, 900, true, false, 100.0f };
+    Check(ProjectCam(wide, edge, sx, sy) && Near(sx, 1800), "a frame wider than 16:9 pillarboxes the game view's lens");
+    float close[3] = { 0.5f, 0, 0 };
+    Check(!ProjectCam(cam, close, sx, sy), "a point less than a unit in front does not project");
+    CamParams probe{ { 0, 0, 0 }, { 0, 0, 0 }, 1600, 900, true, true, 0 };
+    float diag[3] = { 100, -100, 0 };
+    Check(ProjectCam(probe, diag, sx, sy) && Near(sx, 800 + 450), "the probe view's 90 degree lens fits the shorter side");
+
+    XYParams top{ 2, { 100, 200, 0 }, 0.5f };
+    float pt[3] = { 300, 400, 999 };
+    Check(ProjectXY(top, 800, 600, pt, sx, sy) && Near(sx, 500) && Near(sy, 200), "XY: +x right, +y up, z ignored");
+    XYParams front{ 1, { 0, 0, 0 }, 1.0f };
+    float pf[3] = { 10, 999, 20 };
+    Check(ProjectXY(front, 800, 600, pf, sx, sy) && Near(sx, 410) && Near(sy, 280), "XZ: +x right, +z up");
+    XYParams side{ 0, { 0, 0, 0 }, 1.0f };
+    float ps[3] = { 999, 10, 20 };
+    Check(ProjectXY(side, 800, 600, ps, sx, sy) && Near(sx, 410) && Near(sy, 280), "YZ: +y right, +z up");
 
     if (g_fail == 0) printf("host_test: all passed\n");
     return g_fail == 0 ? 0 : 1;

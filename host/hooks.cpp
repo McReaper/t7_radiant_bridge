@@ -8,6 +8,7 @@
 #include "addrs.h"
 #include "editor.h"
 #include "plugin.h"
+#include "render.h"
 #include "log.h"
 #include <windows.h>
 #include <shlwapi.h>
@@ -206,6 +207,7 @@ namespace host::hooks
         Hook("Map_EnterPrefab", rt::Map_EnterPrefab, reinterpret_cast<void*>(&hk_Map_EnterPrefab), reinterpret_cast<void**>(&o_Map_EnterPrefab));
         Hook("Map_LeavePrefab", rt::Map_LeavePrefab, reinterpret_cast<void*>(&hk_Map_LeavePrefab), reinterpret_cast<void**>(&o_Map_LeavePrefab));
         Hook("QuestionBox", rt::QuestionBox, reinterpret_cast<void*>(&hk_QuestionBox), reinterpret_cast<void**>(&o_QuestionBox));
+        render::Install();
         return Hook("RoutineProcessing", rt::RoutineProcessing, reinterpret_cast<void*>(&hk_RoutineProcessing), reinterpret_cast<void**>(&o_RoutineProcessing));
     }
 }

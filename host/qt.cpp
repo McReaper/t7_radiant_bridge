@@ -25,6 +25,7 @@ namespace host::qt
         bool (*p_QAction_isEnabled)(void*);
         bool (*p_QAction_isSeparator)(void*);
         void (*p_QAction_trigger)(void*);
+        bool (*p_QWidget_isVisible)(void*);
         void* (*p_qFindChild_helper)(const void*, const void*, const void*, int);
         const void* p_QObject_meta;
 
@@ -124,6 +125,7 @@ namespace host::qt
         Res(p_QAction_isEnabled, kWidgets, "?isEnabled@QAction@@QEBA_NXZ", ok);
         Res(p_QAction_isSeparator, kWidgets, "?isSeparator@QAction@@QEBA_NXZ", ok);
         Res(p_QAction_trigger, kWidgets, "?trigger@QAction@@QEAAXXZ", ok);
+        Res(p_QWidget_isVisible, kWidgets, "?isVisible@QWidget@@QEBA_NXZ", ok);
         g_ok = ok;
         HLOG("qt: %s", ok ? "menus and named widgets bound" : "unavailable: command, menus, save and action are off");
         return g_ok;
@@ -181,4 +183,6 @@ namespace host::qt
         QStr name(objectName);
         return p_qFindChild_helper(mw, &name, p_QObject_meta, 1 /* Qt::FindChildrenRecursively */);
     }
+
+    bool WidgetVisible(void* widget) { return !Bind() || !widget || p_QWidget_isVisible(widget); }
 }

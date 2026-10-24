@@ -43,6 +43,19 @@ namespace host::rt
     constexpr size_t off_CamWnd_Origin = 208;             // float[3]
     constexpr size_t off_CamWnd_Angles = 220;             // float[3]
 
+    // --- the views' draws (what the capture reads) ---
+    constexpr uintptr_t CCamWnd_Cam_Draw = 0x140244120;   // __int64 (CCamWnd* this, ...)
+    constexpr uintptr_t CXYWnd_XY_Draw = 0x140C2E3E0;     // __int64 (CXYWnd* this, __int64* viewport, ...)
+    constexpr size_t off_CamWnd_Width = 3964;             // int, what Cam_Draw passes to the projection setup
+    constexpr size_t off_CamWnd_Height = 3968;            // int
+    constexpr uintptr_t g_gameView = 0x1453A1EE9;         // char: 1 = GAME VIEW (16:9 letterbox in the pane)
+    constexpr uintptr_t g_probeView = 0x1453A1EEA;        // char: 1 = STATIC PROBE VIEW
+    constexpr uintptr_t Cam_GetFov = 0x1402316D0;         // float (): a 16:9 view's horizontal FOV, every projection's
+    constexpr size_t off_XYWnd_Scale = 132;               // float: pixels per unit
+    constexpr size_t off_XYWnd_Origin = 136;              // float[3]: view centre
+    constexpr size_t off_XYWnd_Widget = 256;              // QWidget*
+    constexpr size_t off_XYWnd_ViewType = 264;            // int: 2 = XY (top), 1 = XZ (front), 0 = YZ (side)
+
     // --- entities / brushes / selection ---
     constexpr uintptr_t Entity_Write = 0x140C8FCF0;       // (entity_t*, FILE*, char selectedOnly): "{ guid ... }" + brushes
     constexpr uintptr_t g_entityList = 0x14522B440;       // global entity list sentinel
