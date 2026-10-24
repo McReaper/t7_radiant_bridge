@@ -12,6 +12,7 @@
 #include "qt.h"
 #include "render.h"
 #include "log.h"
+#include "version.h"
 #include "modtools_plugin.h"
 #include <windows.h>
 #include <objbase.h>   // StringFromGUID2
@@ -23,6 +24,18 @@ namespace host::hostapi
 {
     namespace
     {
+        // The host reports the bridge's version as its own, as the SDK reads it: "1.2.0" -> 0x010200.
+        constexpr uint32_t VersionNumber(const char* v)
+        {
+            uint32_t part[3] = {};
+            for (int i = 0; *v && i < 3; ++v)
+                if (*v == '.') ++i;
+                else part[i] = part[i] * 10 + uint32_t(*v - '0');
+            return (part[0] << 16) | (part[1] << 8) | part[2];
+        }
+        static_assert(VersionNumber("1.2.0") == 0x010200 && VersionNumber("10.0.3") == 0x0A0003, "major.minor.patch, a byte each");
+        static_assert(VersionNumber(bridge::kPluginVersion) >= 0x10100, "below host 1.1.0 the SDK drops target and linkto on import");
+
         DWORD g_mainThread = GetCurrentThreadId();   // set when the table is first built (on the init/main path)
         std::wstring g_dllDir;
 
@@ -286,7 +299,7 @@ namespace host::hostapi
             ModToolsHostApi t{};
             t.size = sizeof t;
             t.apiVersion = MODTOOLS_PLUGIN_API_VERSION;
-            t.hostVersion = 0x010200;   // 1.2.0; >= 0x10100 so the bridge keeps target/linkto on import
+            t.hostVersion = VersionNumber(bridge::kPluginVersion);
             t.PluginDir = H_PluginDir;
             t.PluginsRoot = H_PluginsRoot;
             t.RadiantRoot = H_RadiantRoot;

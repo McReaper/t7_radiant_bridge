@@ -16,10 +16,13 @@ jobs:
         run: cmake --build build --config Release
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        shell: pwsh
+        run: ./tools/package.ps1 -Version ci
       - uses: actions/upload-artifact@v4
         with:
           name: T7RadiantBridge
-          path: build/Release/T7RadiantBridge.dll
+          path: T7RadiantBridge-ci.zip
 
   client:
     runs-on: windows-latest
