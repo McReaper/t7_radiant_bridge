@@ -4,5 +4,5 @@
 
 namespace bridge
 {
-    constexpr const char* kPluginVersion = "1.2.0";
+    constexpr const char* kPluginVersion = "1.2.1";
 }
