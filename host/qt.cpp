@@ -136,16 +136,19 @@ namespace host::qt
         void* mw = Bind() ? MainWindow() : nullptr;
         void* holder = mw ? p_QMainWindow_menuBar(mw) : nullptr;
         void* found = nullptr;
-        for (const std::string& segment : MenuPathSegments(path))
+        std::vector<std::string> segments = MenuPathSegments(path);
+        for (size_t s = 0; s < segments.size();)
         {
             if (!holder) return nullptr;
             std::vector<void*> acts = Actions(holder);
             std::vector<MenuEntry> entries;
             for (void* a : acts) entries.push_back(IsSeparator(a) ? MenuEntry{ std::string(), true } : MenuEntry{ ActionText(a), false });
-            int i = FindMenuEntry(entries, segment);
+            size_t used = 0;
+            int i = FindMenuEntryAt(entries, segments, s, used);
             if (i < 0) return nullptr;
             found = acts[size_t(i)];
             holder = p_QAction_menu(found);
+            s += used;
         }
         return found;
     }

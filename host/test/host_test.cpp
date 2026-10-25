@@ -74,6 +74,21 @@ int main()
     Check(FindMenuEntry({ { "", true } }, "") == -1, "a separator never matches");
     Check(FindMenuEntry({ { "Undo Paste", true } }, "Undo") == -1, "a separator with a label does not match a prefix either");
 
+    // Radiant's Selection/Select By menu has labels that hold a '/'
+    std::vector<MenuEntry> selectBy = { { "Select by Samplesize" }, { "Select by Key/Value" }, { "Select by Key/Value All(*)" }, { "Select by FX Properties" } };
+    std::vector<std::string> keyValue = MenuPathSegments("Selection/Select By/Select by Key/Value");
+    size_t used = 99;
+    Check(FindMenuEntryAt(selectBy, keyValue, 2, used) == 1 && used == 2, "a label holding '/' is named by its two segments");
+    Check(FindMenuEntryAt(selectBy, MenuPathSegments("Select by Key/Value All(*)"), 0, used) == 2 && used == 2, "and its longer neighbour by theirs");
+    Check(FindMenuEntryAt(selectBy, MenuPathSegments("Select by FX Properties/More"), 0, used) == 3 && used == 1, "a whole label takes one segment, the rest left for the next level");
+    Check(FindMenuEntryAt(selectBy, MenuPathSegments("Select by Key/Nope"), 0, used) == -1 && used == 0, "no entry: -1, nothing used");
+    Check(FindMenuEntryAt(selectBy, keyValue, 4, used) == -1 && used == 0, "past the last segment: -1");
+    std::vector<MenuEntry> undoRedo = { { "Undo Paste" }, { "Undo/Redo" } };
+    Check(FindMenuEntryAt(undoRedo, MenuPathSegments("Undo/Redo"), 0, used) == 1 && used == 2, "an exact key over two segments wins over a word prefix of one");
+    Check(FindMenuEntryAt(undoRedo, MenuPathSegments("Undo/Nope"), 0, used) == 0 && used == 1, "a word prefix of one segment when nothing is exact");
+    std::vector<MenuEntry> sameStart = { { "Show" }, { "Show/Hide" } };
+    Check(FindMenuEntryAt(sameStart, MenuPathSegments("Show/Hide"), 0, used) == 0 && used == 1, "a whole label of one segment wins over a longer one");
+
     // the editor camera at the origin looking down +x, a 1600x900 frame, FOV 100 (a 16:9 view's horizontal FOV)
     CamParams cam{ { 0, 0, 0 }, { 0, 0, 0 }, 1600, 900, false, false, 100.0f };
     float sx = 0, sy = 0;

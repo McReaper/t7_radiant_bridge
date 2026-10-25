@@ -25,4 +25,10 @@ namespace host
     // starts with it and a space, as Radiant appends the argument to some entries ("Undo Paste" for "Undo").
     // Separators never match.
     int FindMenuEntry(const std::vector<MenuEntry>& entries, const std::string& segment);
+
+    // The entry a path's segments name at one level of menus, from segments[first] on, or -1; `used` gets how many
+    // segments it took. Some labels hold a '/' ("Select by Key/Value"), which the path's split cuts in two: a segment
+    // joined to the next ones with '/' names an entry too. An exact key wins over a word prefix, then the fewest
+    // segments, so a path whose segments are whole labels picks what FindMenuEntry picks.
+    int FindMenuEntryAt(const std::vector<MenuEntry>& entries, const std::vector<std::string>& segments, size_t first, size_t& used);
 }

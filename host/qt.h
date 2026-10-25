@@ -13,7 +13,7 @@ namespace host::qt
     bool Bind();
 
     // The QAction a menu path names from the menu bar down ("Edit/Undo": '&', a trailing "..." and case ignored;
-    // MenuKey and FindMenuEntry say how), or nullptr.
+    // a label holding '/' written as it reads; MenuKey and FindMenuEntryAt say how), or nullptr.
     void* FindMenuAction(const std::string& path);
     // One "label<TAB>enabled<TAB>submenu" line per entry of the menu at `path` ("" = the menu bar), "---" per
     // separator; "" when there is no such menu.
