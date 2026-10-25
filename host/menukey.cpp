@@ -29,17 +29,50 @@ namespace host
         }
     }
 
-    int FindMenuEntry(const std::vector<MenuEntry>& entries, const std::string& segment)
+    static int ExactEntry(const std::vector<MenuEntry>& entries, const std::string& want)
     {
-        std::string want = MenuKey(segment);
         for (size_t i = 0; i < entries.size(); ++i)
             if (!entries[i].separator && MenuKey(entries[i].label) == want) return int(i);
+        return -1;
+    }
+
+    static int WordPrefixEntry(const std::vector<MenuEntry>& entries, const std::string& want)
+    {
         for (size_t i = 0; i < entries.size(); ++i)
         {
             if (entries[i].separator) continue;
             std::string k = MenuKey(entries[i].label);
             if (k.size() > want.size() && k.compare(0, want.size(), want) == 0 && k[want.size()] == ' ') return int(i);
         }
+        return -1;
+    }
+
+    int FindMenuEntry(const std::vector<MenuEntry>& entries, const std::string& segment)
+    {
+        size_t used = 0;
+        return FindMenuEntryAt(entries, { segment }, 0, used);
+    }
+
+    int FindMenuEntryAt(const std::vector<MenuEntry>& entries, const std::vector<std::string>& segments, size_t first, size_t& used)
+    {
+        std::vector<std::string> wants;   // segments[first], then joined to each next one
+        std::string joined;
+        for (size_t s = first; s < segments.size(); ++s)
+        {
+            joined += (s > first ? "/" : "") + segments[s];
+            wants.push_back(MenuKey(joined));
+        }
+        for (int (*match)(const std::vector<MenuEntry>&, const std::string&) : { ExactEntry, WordPrefixEntry })
+            for (size_t n = 0; n < wants.size(); ++n)
+            {
+                int i = match(entries, wants[n]);
+                if (i >= 0)
+                {
+                    used = n + 1;
+                    return i;
+                }
+            }
+        used = 0;
         return -1;
     }
 }
