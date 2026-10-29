@@ -16,7 +16,7 @@ namespace bridge
         ClosedFn g_onClosed = nullptr;
         HANDLE g_stop = nullptr;    // manual-reset: the plugin is unloading
         std::thread g_accept;
-        // Neither host calls OnUnload when Radiant exits (only before an unload), so StopPipe never joins: Windows
+        // MTPlugins' host doesn't call OnUnload when Radiant exits (only before an unload), so StopPipe never joins: Windows
         // ends the pipe threads, then runs the static destructors, and destroying a joinable std::thread calls
         // std::terminate, a crash on every close. A thread left joinable at destruction is detached instead
         // (here, and in ~Conn); declared after g_accept, this runs before its destructor.
