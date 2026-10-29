@@ -11,7 +11,7 @@ How a client, any program on the same machine, talks to the T7RadiantBridge plug
 - A **reply** header is `<id> ok [summary]` or `<id> err <code> <message>`; it carries the request's id.
 - An **event** header is `0 <event> [args…]`, sent only to a connection that asked for it with `subscribe`.
 - Arguments are separated by single spaces. Where a command says "the rest", its last argument is the rest of the line and may hold spaces (a label, a menu path, a key's value).
-- A **menu path** names an entry from the menu bar down, its labels joined by `/` (`Selection/CSG/CSG Hollow`), without `&`, a trailing `...` or case, a label's first words naming it when no label is equal (`Edit/Undo` for `Undo Paste`). A label that holds a `/` is written as it reads (`Selection/Select By/Select by Key/Value`): the standalone bridge reaches it since 1.2.2; under MTPlugins, whose host splits a path at every `/`, nothing does.
+- A **menu path** names an entry from the menu bar down, its labels joined by `/` (`Selection/CSG/CSG Hollow`), without `&`, a trailing `...` or case, a label's first words naming it when no label is equal (`Edit/Undo` for `Undo Paste`). MTPlugins' host splits a path at every `/`, so an entry whose label holds one (`Select by Key/Value`) is listed by `menus` but can't be run.
 
 ## Radiant's main thread and dialogs
 

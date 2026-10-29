@@ -24,7 +24,7 @@
 A plugin for Radiant, the Black Ops III mod tools' level editor, that lets another program drive it the way a mapper does: read the open map, edit it with undo, run Radiant's own commands, move the camera and capture the views. It serves a named-pipe protocol, [PROTOCOL.md](PROTOCOL.md), so any program on the same machine can be its client: an AI agent's tools, a script, a test. [T7 Companion](https://github.com/McReaper/t7_companion) is one, and ships the bridge to its users.
 
 > [!NOTE]
-> T7 Radiant Bridge is one plugin, not a plugin host: it loads no other plugin and has no UI. Its standalone host only carries the bridge, for a client to load it without installing anything, and steps aside when [MTPlugins](https://github.com/Aidan601/MTPlugins) runs; the bridge is then one of its plugins. For plugins in Radiant, use MTPlugins.
+> T7 Radiant Bridge is one plugin, not a plugin host: it loads no other plugin and has no UI. [MTPlugins](https://github.com/Aidan601/MTPlugins), Radiant's plugin host, loads it, like its own plugins.
 
 ## ⚙️ How it works
 
@@ -40,7 +40,7 @@ flowchart TB
     subgraph radiant["radiant_modtools.exe"]
         pipe["Pipe threads, one per connection"]
         commands["Commands, on Radiant's main thread"]
-        host["Host: MTPlugins', or the bridge's own"]
+        host["MTPlugins' host"]
         editor["Radiant: map, undo, selection, menus, camera, views"]
     end
     client <-->|"requests, replies, events (PROTOCOL.md)"| pipe
@@ -52,14 +52,12 @@ flowchart TB
 
 - A client connects to `\\.\pipe\t7_radiant_bridge_<pid>`, says `hello`, then sends requests; several clients may be connected at once.
 - The pipe threads only move bytes. Each request runs on Radiant's main thread, at the editor's idle tick, where its state is safe to read and change. The reply goes back on its connection, and events (console lines, map loads and saves) to the connections that asked for them.
-- A host puts the plugin in Radiant and gives it the editor: MTPlugins' host, or the bridge's own standalone host (`host/`, forked from MTPlugins), which hooks Radiant itself. One host only ever runs in a Radiant: the standalone one steps aside when MTPlugins is there.
+- MTPlugins' host puts the plugin in Radiant and gives it the editor: Radiant loads the host itself as it starts, through MTPlugins' `d3d9.dll` beside it, so nothing is injected into Radiant from outside.
 
 ## 📥 Install
 
-A release's `T7RadiantBridge-<version>.zip` holds both builds of the same plugin (`plugin/src/`):
-
-- `T7RadiantBridge-<version>.dll`, the standalone bridge: where MTPlugins doesn't run, inject it into a running Radiant, with `LoadLibraryW` from a remote thread once Radiant's main window exists. Nothing is written into the BO3 install. Its name carries its version, as a running Radiant keeps the one it loaded locked.
-- `mtplugins/T7RadiantBridge/`, the MTPlugins plugin: where [MTPlugins](https://github.com/Aidan601/MTPlugins) runs, copy that folder into `<BO3 root>/bin/plugins/` and start Radiant. MTPlugins loads a new plugin on its own unless its `autoload_new` setting (`bin/plugins/RadiantPlugins.ini`) is 0; then tick it in MTPlugins' plugin list.
+1. Install [MTPlugins](https://github.com/Aidan601/MTPlugins/releases/latest): its installer finds the BO3 folder.
+2. Copy `mtplugins/T7RadiantBridge/`, from a release's `T7RadiantBridge-<version>.zip`, into `<BO3 root>/bin/plugins/`, and start Radiant. MTPlugins loads a new plugin on its own unless its `autoload_new` setting (`bin/plugins/RadiantPlugins.ini`) is 0; then tick it in MTPlugins' plugin list.
 
 ## ⌨️ Use
 
@@ -74,11 +72,11 @@ t7rb listen console map                     # the console and the map's events, 
 
 ## 🛠️ Build
 
-`build.bat` builds both DLLs into `build/Release/` with Visual Studio's C++ tools and CMake, for x64 with MSVC as Radiant is built, and runs the tests: the protocol's text, and the host's logic that needs no Radiant (menu paths, view projection, the exe check). `t7rb` builds with `go build` in `tools/t7rb` (Go 1.25). CI does both on every pull request and keeps the packed archive.
+`build.bat` builds `build/Release/T7RadiantBridge.dll` with Visual Studio's C++ tools and CMake, for x64 with MSVC as Radiant is built, and runs the tests of the protocol's text. `t7rb` builds with `go build` in `tools/t7rb` (Go 1.25). CI does both on every pull request and keeps the packed archive.
 
 ## 🚀 Releases
 
-Set `kPluginVersion` in `plugin/src/version.h` (the standalone host reports the same version), then push the tag `v<version>`: the release workflow checks the two match, builds and tests, and publishes `T7RadiantBridge-<version>.zip`, laid out by `tools/package.ps1`. A command added to the protocol is marked in PROTOCOL.md with the version that brought it, so a client can require it.
+Set `kPluginVersion` in `plugin/src/version.h`, then push the tag `v<version>`: the release workflow checks the two match, builds and tests, and publishes `T7RadiantBridge-<version>.zip`, laid out by `tools/package.ps1`. A command added to the protocol is marked in PROTOCOL.md with the version that brought it, so a client can require it.
 
 ```sh
 git tag v1.2.0 && git push origin v1.2.0
@@ -86,4 +84,4 @@ git tag v1.2.0 && git push origin v1.2.0
 
 ## 📄 License
 
-GPLv3, like MTPlugins, whose SDK header the plugin compiles and whose host the standalone build forks; MinHook, which the standalone host hooks with, is BSD-2. A client is a separate program talking over the pipe, under its own license. Third-party notices are in [NOTICE.md](NOTICE.md).
+GPLv3, like MTPlugins, whose SDK header the plugin compiles. A client is a separate program talking over the pipe, under its own license. Third-party notices are in [NOTICE.md](NOTICE.md).
