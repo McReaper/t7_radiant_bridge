@@ -34,8 +34,11 @@ jobs:
         run: |
           branch="mtplugins-sdk/${{ steps.sdk.outputs.tag }}"
           echo "name=$branch" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"   # proposed already: its PR or issue is open
+          # proposed already when its PR or issue is open; a branch alone, left by a run that failed, is pushed again
+          title="chore(sdk): the vendored MTPlugins SDK headers are ${{ steps.sdk.outputs.tag }}'s"
+          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ] ||
+             [ -n "$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[].number')" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Configure
         if: steps.sdk.outputs.changed == 'true' && steps.branch.outputs.exists != 'true'
@@ -58,7 +61,7 @@ jobs:
           git switch -c "$BRANCH"
           git add third_party/mtplugins_sdk
           git commit -m "chore(sdk): the vendored MTPlugins SDK headers are $TAG's"
-          git push origin "$BRANCH"
+          git push --force origin "$BRANCH"
           title="chore(sdk): the vendored MTPlugins SDK headers are $TAG's"
           if [ "$BUILT" = success ]; then verdict="builds and passes its tests"; else verdict="**fails to build or test**: see this run"; fi
           {
@@ -67,7 +70,7 @@ jobs:
             echo "Before merging, check that no member of \`ModToolsHostAPI\` the plugin calls moved or changed type: an appended one is safe, a moved one builds a plugin that crashes in Radiant."
             echo
             echo '```diff'
-            git diff origin/main -- third_party/mtplugins_sdk | head -c 50000
+            git diff HEAD~1 -- third_party/mtplugins_sdk | head -c 50000   # the checkout fetched this ref alone
             echo '```'
           } > body.md
           if ! gh pr create --base main --head "$BRANCH" --title "$title" --body-file body.md; then
