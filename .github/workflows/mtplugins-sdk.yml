@@ -1,0 +1,80 @@
+name: mtplugins-sdk
+
+# Weekly: when MTPlugins' latest release ships other SDK headers than third_party/mtplugins_sdk/, build and test the
+# plugin against them on a branch, then open a PR, or an issue linking the branch when the repository doesn't let
+# workflows open PRs (Settings > Actions > General). Never merged here: a header that moves a member of the host API
+# builds a plugin that crashes in Radiant.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  update:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch MTPlugins' latest SDK headers
+        id: sdk
+        run: ./tools/mtplugins-sdk.sh | tee -a "$GITHUB_OUTPUT"
+      - name: Is it new?
+        id: branch
+        if: steps.sdk.outputs.changed == 'true'
+        run: |
+          branch="mtplugins-sdk/${{ steps.sdk.outputs.tag }}"
+          echo "name=$branch" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"   # proposed already: its PR or issue is open
+          fi
+      - name: Configure
+        if: steps.sdk.outputs.changed == 'true' && steps.branch.outputs.exists != 'true'
+        run: cmake -S . -B build -A x64
+      - name: Build and test
+        id: build
+        if: steps.sdk.outputs.changed == 'true' && steps.branch.outputs.exists != 'true'
+        continue-on-error: true
+        run: cmake --build build --config Release && ctest --test-dir build -C Release --output-on-failure
+      - name: Propose it
+        if: steps.sdk.outputs.changed == 'true' && steps.branch.outputs.exists != 'true'
+        env:
+          TAG: ${{ steps.sdk.outputs.tag }}
+          SHA: ${{ steps.sdk.outputs.sha }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          BUILT: ${{ steps.build.outcome }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add third_party/mtplugins_sdk
+          git commit -m "chore(sdk): the vendored MTPlugins SDK headers are $TAG's"
+          git push origin "$BRANCH"
+          title="chore(sdk): the vendored MTPlugins SDK headers are $TAG's"
+          if [ "$BUILT" = success ]; then verdict="builds and passes its tests"; else verdict="**fails to build or test**: see this run"; fi
+          {
+            echo "MTPlugins [$TAG](https://github.com/Aidan601/MTPlugins/releases/tag/$TAG) (\`$SHA\`) ships other SDK headers than \`third_party/mtplugins_sdk/\`. Against them, the plugin $verdict: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+            echo
+            echo "Before merging, check that no member of \`ModToolsHostAPI\` the plugin calls moved or changed type: an appended one is safe, a moved one builds a plugin that crashes in Radiant."
+            echo
+            echo '```diff'
+            git diff origin/main -- third_party/mtplugins_sdk | head -c 50000
+            echo '```'
+          } > body.md
+          if ! gh pr create --base main --head "$BRANCH" --title "$title" --body-file body.md; then
+            {
+              echo "This repository doesn't let workflows open pull requests, so open it from the branch: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1"
+              echo
+              cat body.md
+            } > issue.md
+            gh issue create --title "$title" --body-file issue.md
+          fi
